@@ -33,7 +33,7 @@ jobs:
           key: ${{ secrets.KEY }}
           port: ${{ vars.PORT }}
           script: |
-            set -xe
+            set -x
             repo_name="${{ github.repository }}"
             repo_name=${repo_name#*/}
             repo_name=${repo_name#*/}
@@ -45,8 +45,8 @@ jobs:
             git reset --hard origin/main
             kubectl apply -f config/proxy-cm.yaml
             name="proxy-handle"
-            job=$(kubectl get job -o=custom-columns=NAME:.metadata.name --no-headers | grep $name)
+            job="$(kubectl get job -o=custom-columns=NAME:.metadata.name --no-headers | grep $name)"
             if [ -n "$job" ]; then
-              echo $job |kubectl delete job
+              echo $job |xargs kubectl delete job
             fi
             kubectl create job --from=cronjob/$name $name
