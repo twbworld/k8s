@@ -20,6 +20,12 @@ spec:
             - name: log-clear
               image: busybox:latest
               imagePullPolicy: IfNotPresent
+              env:
+                - name: TZ
+                  valueFrom:
+                    configMapKeyRef:
+                      name: global
+                      key: timezone
               volumeMounts:
                 - name: log
                   mountPath: /var/www/logs/
@@ -75,7 +81,10 @@ spec:
               imagePullPolicy: IfNotPresent
               env:
                 - name: TZ
-                  value: Asia/Shanghai
+                  valueFrom:
+                    configMapKeyRef:
+                      name: global
+                      key: timezone
                 - name: MYSQL_ROOT_PASSWORD
                   valueFrom:
                     secretKeyRef:
@@ -147,7 +156,10 @@ spec:
               imagePullPolicy: IfNotPresent
               env:
                 - name: TZ
-                  value: Asia/Shanghai
+                  valueFrom:
+                    configMapKeyRef:
+                      name: global
+                      key: timezone
                 - name: MYSQL_ROOT_PASSWORD
                   valueFrom:
                     secretKeyRef:
@@ -219,7 +231,10 @@ spec:
               imagePullPolicy: IfNotPresent
               env:
                 - name: TZ
-                  value: Asia/Shanghai
+                  valueFrom:
+                    configMapKeyRef:
+                      name: global
+                      key: timezone
                 - name: MYSQL_ROOT_PASSWORD
                   valueFrom:
                     secretKeyRef:

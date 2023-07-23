@@ -70,7 +70,10 @@ spec:
               containerPort: 8080
           env:
             - name: TZ
-              value: Asia/Shanghai
+              valueFrom:
+                configMapKeyRef:
+                  name: global
+                  key: timezone
             - name: UUID
               valueFrom:
                 fieldRef:

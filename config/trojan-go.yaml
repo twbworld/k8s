@@ -83,6 +83,12 @@ spec:
           ports:
             - name: cp
               containerPort: 443
+          env:
+            - name: TZ
+              valueFrom:
+                configMapKeyRef:
+                  name: global
+                  key: timezone
           volumeMounts:
             - name: cm
               mountPath: /etc/trojan-go/

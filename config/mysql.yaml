@@ -125,7 +125,10 @@ spec:
               # hostPort: 3306 #把容器端口containerPort映射到宿主机hostPort端口上,类似"port-forward", 后者的优先级小;注意docker和k8s是跳过ufw直接设置iptables的, 一旦映射则直接暴露端口
           env:
             - name: TZ
-              value: Asia/Shanghai
+              valueFrom:
+                configMapKeyRef:
+                  name: global
+                  key: timezone
             - name: UUID
               valueFrom:
                 fieldRef:

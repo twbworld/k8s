@@ -17,3 +17,11 @@
     ``` sh
     ./kube-explorer-linux-amd64 --kubeconfig ~/.kube/config --http-listen-port=8888
     ```
+* 证书更新(k8s更新secret证书后,traefik会自动reload)
+  ``` sh
+  ...
+  acme.sh --install-cert -d twbhub.com -d *.twbhub.com -d twbhub.top -d *.twbhub.top \
+    --key-file /var/www/k8s/data/cert/twbhub.com_top/key.pem \
+    --fullchain-file /var/www/k8s/data/cert/twbhub.com_top/cert.pem \
+    --reloadcmd "cd /var/www/k8s/ && kubectl create secret tls tls-secret --cert=/var/www/k8s/data/cert/twbhub.com_top/cert.pem --key=/var/www/k8s/data/cert/twbhub.com_top/key.pem --dry-run -o yaml |kubectl apply -f - && git checkout -- yaml-reload.sh && ./yaml-reload.sh trojan-go && exit'"
+  ```
