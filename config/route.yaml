@@ -1,0 +1,469 @@
+---
+#需要配置IngressRoute CRD才能使用traefik.containo.us资源, k3s启动时安装traefik后已顺带配置好了
+#需要配置Gateway API CRD才能使用gateway.networking.k8s.io资源(traefik目前支持v0.4, 即gateway.networking.k8s.io/v1alpha2)
+
+#Gateway API CRD配置代码:config/crd/gateway-api.yaml(源码:https://github.com/kubernetes-sigs/gateway-api/tree/v0.4.0/config/v1alpha2)
+#route使用参考代码: https://github.com/kubernetes-sigs/gateway-api/tree/v0.4.0/examples/v1alpha2
+
+#对tls设置sni规则时发现, 优先级:IngressRouteTCP > TLSRoute; 即优先级:IngressRoute模式 > Gateway API模式
+#设置http规则时发现, 优先级:HTTPRoute > IngressRoute; 即优先级:Gateway API模式 > IngressRoute模式
+#使用IngressRoute模式同时设置"IngressRouteTCP"的sni规则和"IngressRoute"验证https, 即优先级:IngressRoute > IngressRouteTCP
+
+#IngressRoute=========================begin
+
+---
+apiVersion: traefik.containo.us/v1alpha1
+kind: TLSOption
+metadata:
+  name: tls-version
+spec:
+  minVersion: VersionTLS12
+
+---
+#规则重用
+apiVersion: traefik.containo.us/v1alpha1
+kind: Middleware
+metadata:
+  name: websecure
+spec:
+  chain:
+    middlewares:
+      - name: worker-processes
+      - name: circuit-breaker
+      - name: limit-req
+      - name: redirect-https
+      - name: redirect-non-www
+      - name: error-page-4xx
+      - name: error-page-5xx
+      - name: compress-gzip
+      - name: add-header
+---
+#密码授权验证
+apiVersion: traefik.containo.us/v1alpha1
+kind: Middleware
+metadata:
+  name: traefik-dashboard-auth
+spec:
+  basicAuth:
+    secret: traefik-dashboard
+    removeHeader: true #删除验证头
+
+---
+#强制转https
+apiVersion: traefik.containo.us/v1alpha1
+kind: Middleware
+metadata:
+  name: redirect-https
+spec:
+  redirectScheme:
+    scheme: https
+    permanent: false #永久重定向
+
+---
+#www三级域名转二级域名
+apiVersion: traefik.containo.us/v1alpha1
+kind: Middleware
+metadata:
+  name: redirect-non-www
+spec:
+  redirectRegex:
+    regex: ^https://www\.(.*)
+    replacement: https://${1}
+    permanent: false
+
+---
+#gzip压缩
+apiVersion: traefik.containo.us/v1alpha1
+kind: Middleware
+metadata:
+  name: compress-gzip
+spec:
+  compress: {}
+
+---
+# 错误页
+apiVersion: traefik.containo.us/v1alpha1
+kind: Middleware
+metadata:
+  name: error-page-5xx
+spec:
+  errors:
+    status:
+      - "500-599"
+    query: /50x.html
+    service:
+      name: proxy-svc
+      port: sp
+
+---
+# 错误页
+apiVersion: traefik.containo.us/v1alpha1
+kind: Middleware
+metadata:
+  name: error-page-4xx
+spec:
+  errors:
+    status:
+      - "402-499"
+    query: /404.html
+    service:
+      name: proxy-svc
+      port: sp
+---
+# 修改url
+apiVersion: traefik.containo.us/v1alpha1
+kind: Middleware
+metadata:
+  name: url404
+spec:
+  replacePath:
+    path: /404.html
+
+---
+# 响应头
+apiVersion: traefik.containo.us/v1alpha1
+kind: Middleware
+metadata:
+  name: add-header
+spec:
+  headers:
+    frameDeny: true #禁止外源iframes,减少点击劫持
+    customFrameOptionsValue: SAMEORIGIN #禁止外源iframes,减少点击劫持
+    customBrowserXSSValue: "1; mode=block" #防XSS攻击
+    contentTypeNosniff: true #禁止服务器自动解析资源类型
+    stsIncludeSubdomains: true #启用HSTS;要求浏览器总是通过 https
+    stsPreload: true #启用HSTS;要求浏览器总是http跳转到https
+    customResponseHeaders:
+      wall: "Hi! Welcome!"
+
+---
+# 并行
+apiVersion: traefik.containo.us/v1alpha1
+kind: Middleware
+metadata:
+  name: worker-processes
+spec:
+  inFlightReq:
+    amount: 2 #最大并行数, cpu核心数
+---
+# 限流
+apiVersion: traefik.containo.us/v1alpha1
+kind: Middleware
+metadata:
+  name: limit-req
+spec:
+  rateLimit: # 1s 内接收的请求数的平均值不大于500个，高峰最大1000个请求
+    burst: 200
+    average: 100
+---
+# 熔断
+apiVersion: traefik.containo.us/v1alpha1
+kind: Middleware
+metadata:
+  name: circuit-breaker
+spec:
+  circuitBreaker:
+    expression: LatencyAtQuantileMS(70.0) > 2000 || NetworkErrorRatio() > 0.5 || ResponseCodeRatio(500, 600, 0, 600) > 0.5 #达70.0%(一定得有小数点)流量的网络延迟超2秒, 或者网络错误率达50%, 或者50%流量返回5XX时,出发熔断
+---
+#流量复制
+apiVersion: traefik.containo.us/v1alpha1
+kind: TraefikService
+metadata:
+  name: mirror
+spec:
+  mirroring:
+    name: proxy-svc
+    port: sp
+    #实现"流量复制"
+    # mirrors:
+    #   - name: proxy-svc
+    #     port: sp
+    #     kind: Service
+    #     percent: 50 #流向mirroring的流量的其中percent%复制到mirrors
+
+---
+#金丝雀发布(灰度)
+#需要后端服务设定cookie从而指定是否进灰度
+apiVersion: traefik.containo.us/v1alpha1
+kind: TraefikService
+metadata:
+  name: wrr
+spec:
+  weighted:
+    # sticky:
+    #   cookie:
+    #     name: c0 #如果cookie带c0=[namespace名]-[service名]-[port名], 则去到指定service;从而实现灰度
+    services:
+      - name: proxy-svc
+        port: sp
+        weight: 1
+        sticky:
+          cookie:
+            name: c-pod #同上,此处去到指定pod
+
+---
+apiVersion: traefik.containo.us/v1alpha1
+kind: IngressRoute
+metadata:
+  name: page-not-found
+spec:
+  entryPoints:
+    - web
+    - test
+  routes:
+    - match: Path(`/404.html`) || Path(`/40x.html`) || Path(`/50x.html`)
+      priority: 2 #设定路由优先级;如有些"match"是默认优先级较低的模糊匹配
+      kind: Rule
+      services:
+        - name: proxy-svc
+          port: sp
+    - match: PathPrefix(`/`) #匹配所有路径
+      middlewares:
+        - name: url404 #因为traefik找不到路由的默认页面简陋,重定向到指定页面
+      priority: 1
+      kind: Rule
+      services:
+        - name: proxy-svc
+          port: sp
+
+---
+#四层网络SNI分流(只能用于Tls)
+apiVersion: traefik.containo.us/v1alpha1
+kind: IngressRouteTCP
+metadata:
+  name: sni
+spec:
+  entryPoints:
+    - websecure
+  tls:
+    passthrough: true
+  routes:
+    - match: HostSNI(`t.twbhub.top`) || HostSNI(`tr.twbhub.top`) || HostSNI(`test.cc.cc`)
+      services:
+        - name: trojan-go-svc
+          port: sp
+---
+#参数文档
+apiVersion: traefik.containo.us/v1alpha1
+kind: IngressRoute #CRD(IngressRoute)和Ingress和Gateway API三种方式创建路由
+metadata:
+  name: https
+spec:
+  entryPoints:
+    - websecure #如果使用了websecure而没有配置tls, 只要没设置"entrypoints.websecure.http.tls=true", 访问http://xx.xx:[websecure]也是能访问的
+  tls:
+    secretName: tls-secret
+  routes:
+    # - match: Host(`admin.twbhub.com`) || Host(`admin.cc.cc`)
+    #   kind: Rule
+    #   middlewares:
+    #     - name: websecure
+    #     - name: traefik-dashboard-auth
+    #   services:
+    #     - name: api@internal
+    #       kind: TraefikService
+    - match: Host(`www.twbhub.com`) || Host(`twbhub.top`) || Host(`www.twbhub.top`) || Host(`clash.twbhub.top`) || Host(`clash.twbhub.com`) || Host(`go.cc.cc`)
+      middlewares:
+        - name: websecure
+      kind: Rule
+      services:
+        - name: wrr
+          kind: TraefikService
+    - match: Path(`/404.html`) || Path(`/40x.html`) || Path(`/50x.html`)
+      kind: Rule
+      services:
+        - name: proxy-svc
+          port: sp
+    - match: PathPrefix(`/`) #匹配所有路径
+      middlewares:
+        - name: url404
+      priority: 1
+      kind: Rule
+      services:
+        - name: proxy-svc
+          port: sp
+
+#IngressRoute=========================end
+
+#Gateway API============================================================begin
+
+# ---
+# apiVersion: gateway.networking.k8s.io/v1alpha2
+# kind: GatewayClass
+# metadata:
+#   name: my-gc
+# spec:
+#   controllerName: traefik.io/gateway-controller
+
+# ---
+# apiVersion: gateway.networking.k8s.io/v1alpha2
+# kind: Gateway
+# metadata:
+#   name: my-gtw
+# spec:
+#   gatewayClassName: my-gc
+#   listeners:
+#     - name: tls
+#       protocol: TLS
+#       port: 8443
+#       tls:
+#         mode: Passthrough #让服务来做tls验证,即四层网络SNI分流
+#       # hostname: "*.cc.cc"
+#       allowedRoutes:
+#         kinds:
+#           - kind: TLSRoute
+#         namespaces:
+#           from: All
+#     - name: http
+#       protocol: HTTP
+#       port: 8000 #使用traefik设置的端口:entrypoints.web.address
+#       allowedRoutes:
+#         kinds:
+#           - kind: HTTPRoute
+#         namespaces:
+#           from: All
+#     # - name: https
+#     #   protocol: HTTPS
+#     #   port: 8442
+#     #   tls:
+#     #     certificateRefs:
+#     #       - kind: Secret
+#     #         name: tls-secret
+#     #   allowedRoutes:
+#     #     kinds:
+#     #       - kind: HTTPRoute
+#     #     namespaces:
+#     #       from: All
+
+# ---
+# #四层网络SNI分流
+# apiVersion: gateway.networking.k8s.io/v1alpha2
+# kind: TLSRoute
+# metadata:
+#   name: sni
+# spec:
+#   parentRefs:
+#     - name: my-gtw
+#       # sectionName: tls
+#   hostnames:
+#     - go.cc.cc
+#   rules:
+#     - backendRefs:
+#       - name: nginx-svc
+#         port: 8081
+#         weight: 1
+# ---
+# apiVersion: gateway.networking.k8s.io/v1alpha2
+# kind: HTTPRoute
+# metadata:
+#   name: http-test
+# spec:
+#   parentRefs:
+#     - name: my-gtw
+#       # sectionName: http
+#   hostnames:
+#     - go.cc.cc
+#   rules:
+#     - matches:
+#       - path:
+#           type: PathPrefix
+#           value: /
+#       backendRefs:
+#       - name: whoami
+#         port: 80
+#         weight: 1
+
+#Gateway API====================================================================end
+
+#traefik-role============================================================begin
+
+---
+#k3s自动配置的权限有缺少, 故重新配置
+#由于本配置需要滞后执行, 故跟route一并滞后
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: traefik-kube-system
+  annotations:
+    meta.helm.sh/release-name: traefik
+    meta.helm.sh/release-namespace: kube-system
+  labels:
+    app.kubernetes.io/instance: traefik-kube-system
+    app.kubernetes.io/managed-by: Helm
+    app.kubernetes.io/name: traefik
+rules:
+  - apiGroups:
+      - ""
+    resources:
+      - namespaces
+    verbs:
+      - list
+      - watch
+  - apiGroups:
+      - ""
+    resources:
+      - services
+      - endpoints
+      - secrets
+    verbs:
+      - get
+      - list
+      - watch
+  - apiGroups:
+      - gateway.networking.k8s.io
+    resources:
+      - gatewayclasses
+      - gateways
+      - httproutes
+      - tcproutes
+      - tlsroutes
+    verbs:
+      - get
+      - list
+      - watch
+  - apiGroups:
+      - gateway.networking.k8s.io
+    resources:
+      - gatewayclasses/status
+      - gateways/status
+      - httproutes/status
+      - tcproutes/status
+      - tlsroutes/status
+    verbs:
+      - update
+  - apiGroups:
+      - extensions
+      - networking.k8s.io
+    resources:
+      - ingresses
+      - ingressclasses
+    verbs:
+      - get
+      - list
+      - watch
+  - apiGroups:
+      - extensions
+      - networking.k8s.io
+    resources:
+      - ingresses/status
+    verbs:
+      - update
+  - apiGroups:
+      - traefik.io
+      - traefik.containo.us
+    resources:
+      - ingressroutes
+      - ingressroutetcps
+      - ingressrouteudps
+      - middlewares
+      - middlewaretcps
+      - tlsoptions
+      - tlsstores
+      - traefikservices
+      - serverstransports
+      - serverstransporttcps
+    verbs:
+      - get
+      - list
+      - watch
+#traefik-role============================================================end

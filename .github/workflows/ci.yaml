@@ -1,0 +1,44 @@
+name: main
+on:
+  workflow_dispatch: #github页面手动触发
+  push:
+    paths-ignore:
+      - '.*'
+      - 'LICENSE'
+      - 'README.md'
+  pull_request:
+    paths-ignore:
+      - '.*'
+      - 'LICENSE'
+      - 'README.md'
+  workflow_call: #允许其他workflow调用
+    inputs:
+      continue-on-error:
+        description: '有错误是否继续'
+        default: false
+        required: false
+        type: boolean
+
+jobs:
+
+  review:
+    runs-on: ubuntu-latest
+    permissions: write-all
+    env:
+      TZ: Asia/Shanghai
+    steps:
+      - uses: actions/checkout@v3
+
+      - name: check yaml
+        uses: stackrox/kube-linter-action@v1 #审查k8s的yaml配置
+        continue-on-error: ${{ inputs.continue-on-error == '' && true || inputs.continue-on-error }} #非workflow_call触发inputs为空
+        with:
+          directory: ./
+          # config: ../kube-linter-config.yaml
+          format: sarif
+          output-file: ../kube-linter.sarif
+      # 对接Github的Security菜单
+      - name: Upload-github-sarif-reporter
+        uses: github/codeql-action/upload-sarif@v2
+        with:
+          sarif_file: ../kube-linter.sarif

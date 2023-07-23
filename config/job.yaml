@@ -1,0 +1,263 @@
+#CronJob立即执行: kubectl create job --from=cronjob/xxx xxx
+---
+#定时清理log
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: log-clear
+spec:
+  schedule: "5 16 * * *" #注意系统环境时区
+  jobTemplate:
+    spec:
+      template:
+        spec:
+          restartPolicy: Never
+          volumes:
+            - name: log
+              persistentVolumeClaim:
+                claimName: log
+          containers:
+            - name: log-clear
+              image: busybox:latest
+              imagePullPolicy: IfNotPresent
+              volumeMounts:
+                - name: log
+                  mountPath: /var/www/logs/
+              command:
+                - /bin/sh
+                - -c
+                - |-
+                  set -e
+                  size="10240k" #处理过大文件
+                  row=999 #保留行数
+                  path="/var/www/logs/"
+                  if [ ! -d "$path" ]; then
+                    echo "路径不存在[orgjioocs]"
+                    exit 1
+                  fi
+                  for f in $(find $path -name "*.log" -type f -size +$size); do
+                    r=$(cat $f |wc -l)
+                    d=$(expr $r - $row)
+                    if [ $r -gt $row ]; then
+                        sed -i "1,${d}d" $f
+                        echo $(echo '[' && date "+%Y-%m-%d %H:%M:%S" && echo ']') >> $f
+                        echo $f
+                    fi
+                  done
+                  echo "完成"$(date "+%Y-%m-%d %H:%M:%S")
+                  exit 0
+---
+# 流量上下行的记录清零
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: proxy-clear
+spec:
+  schedule: "0 0 1 * *"
+  jobTemplate:
+    spec:
+      template:
+        spec:
+          restartPolicy: Never
+          volumes:
+            - name: env
+              configMap:
+                name: proxy-env
+            - name: cm
+              configMap:
+                name: proxy-cm
+            - name: mysql
+              configMap:
+                name: trojan-go-cm
+          initContainers:
+            - name: wait-mysql
+              image: mysql:8.0-debian
+              imagePullPolicy: IfNotPresent
+              env:
+                - name: TZ
+                  value: Asia/Shanghai
+                - name: MYSQL_ROOT_PASSWORD
+                  valueFrom:
+                    secretKeyRef:
+                      name: mysql-secret
+                      key: root-pwd
+              command:
+                - /bin/sh
+                - -c
+                - |-
+                  set -e
+                  maxTries=15
+                  while [ $maxTries -gt 0 ] && ! mysqladmin ping --connect-timeout=3 -s -hmysql-svc -uroot -p$MYSQL_ROOT_PASSWORD;do
+                      echo '等待mysql可用'
+                      sleep 1
+                      maxTries=$(( $maxTries - 1 ))
+                  done
+                  if [ $maxTries -le 0 ]; then
+                      echo >&2 'error: 尝试多次连接mysql服务失败'
+                      exit 1
+                  fi
+                  echo 'mysql已启动'
+          containers:
+            - name: proxy-clear
+              image: ghcr.io/twbworld/proxy:0.1.0
+              imagePullPolicy: IfNotPresent
+              volumeMounts:
+                - name: env
+                  mountPath: /volume/env/
+                - name: cm
+                  mountPath: /volume/cm/
+                - name: mysql
+                  mountPath: /volume/mysql/
+              command:
+                - /bin/sh
+                - -c
+                - |
+                  set -e
+                  ln -sf /volume/env/.env /app/config/.env
+                  ln -sf /volume/mysql/config.json /app/config/.trojan-go
+                  ln -sf /volume/cm/users.json /app/dao/users.json
+                  ./server -a clear
+
+---
+# 过期用户处理
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: proxy-expiry
+spec:
+  schedule: "0 16 * * *"
+  jobTemplate:
+    spec:
+      template:
+        spec:
+          restartPolicy: Never
+          volumes:
+            - name: env
+              configMap:
+                name: proxy-env
+            - name: cm
+              configMap:
+                name: proxy-cm
+            - name: mysql
+              configMap:
+                name: trojan-go-cm
+          initContainers:
+            - name: wait-mysql
+              image: mysql:8.0-debian
+              imagePullPolicy: IfNotPresent
+              env:
+                - name: TZ
+                  value: Asia/Shanghai
+                - name: MYSQL_ROOT_PASSWORD
+                  valueFrom:
+                    secretKeyRef:
+                      name: mysql-secret
+                      key: root-pwd
+              command:
+                - /bin/sh
+                - -c
+                - |-
+                  set -e
+                  maxTries=15
+                  while [ $maxTries -gt 0 ] && ! mysqladmin ping --connect-timeout=3 -s -hmysql-svc -uroot -p$MYSQL_ROOT_PASSWORD;do
+                      echo '等待mysql可用'
+                      sleep 1
+                      maxTries=$(( $maxTries - 1 ))
+                  done
+                  if [ $maxTries -le 0 ]; then
+                      echo >&2 'error: 尝试多次连接mysql服务失败'
+                      exit 1
+                  fi
+                  echo 'mysql已启动'
+          containers:
+            - name: proxy-expiry
+              image: ghcr.io/twbworld/proxy:0.1.0
+              imagePullPolicy: IfNotPresent
+              volumeMounts:
+                - name: env
+                  mountPath: /volume/env/
+                - name: cm
+                  mountPath: /volume/cm/
+                - name: mysql
+                  mountPath: /volume/mysql/
+              command:
+                - /bin/sh
+                - -c
+                - |
+                  set -e
+                  ln -sf /volume/env/.env /app/config/.env
+                  ln -sf /volume/mysql/config.json /app/config/.trojan-go
+                  ln -sf /volume/cm/users.json /app/dao/users.json
+                  ./server -a expiry
+
+---
+# 根据`dao/users.json`文件更新数据库用户信息
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: proxy-handle
+spec:
+  schedule: "0 0 31 2 *"
+  jobTemplate:
+    spec:
+      template:
+        spec:
+          restartPolicy: Never
+          volumes:
+            - name: env
+              configMap:
+                name: proxy-env
+            - name: cm
+              configMap:
+                name: proxy-cm
+            - name: mysql
+              configMap:
+                name: trojan-go-cm
+          initContainers:
+            - name: wait-mysql
+              image: mysql:8.0-debian
+              imagePullPolicy: IfNotPresent
+              env:
+                - name: TZ
+                  value: Asia/Shanghai
+                - name: MYSQL_ROOT_PASSWORD
+                  valueFrom:
+                    secretKeyRef:
+                      name: mysql-secret
+                      key: root-pwd
+              command:
+                - /bin/sh
+                - -c
+                - |-
+                  set -e
+                  maxTries=15
+                  while [ $maxTries -gt 0 ] && ! mysqladmin ping --connect-timeout=3 -s -hmysql-svc -uroot -p$MYSQL_ROOT_PASSWORD;do
+                      echo '等待mysql可用'
+                      sleep 1
+                      maxTries=$(( $maxTries - 1 ))
+                  done
+                  if [ $maxTries -le 0 ]; then
+                      echo >&2 'error: 尝试多次连接mysql服务失败'
+                      exit 1
+                  fi
+                  echo 'mysql已启动'
+          containers:
+            - name: proxy-handle
+              image: ghcr.io/twbworld/proxy:0.1.0
+              imagePullPolicy: IfNotPresent
+              volumeMounts:
+                - name: env
+                  mountPath: /volume/env/
+                - name: cm
+                  mountPath: /volume/cm/
+                - name: mysql
+                  mountPath: /volume/mysql/
+              command:
+                - /bin/sh
+                - -c
+                - |
+                  set -e
+                  ln -sf /volume/env/.env /app/config/.env
+                  ln -sf /volume/mysql/config.json /app/config/.trojan-go
+                  ln -sf /volume/cm/users.json /app/dao/users.json
+                  ./server -a handle
