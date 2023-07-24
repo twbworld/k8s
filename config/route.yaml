@@ -262,7 +262,7 @@ spec:
     #   services:
     #     - name: api@internal
     #       kind: TraefikService
-    - match: Host(`www.twbhub.com`) || Host(`twbhub.top`) || Host(`www.twbhub.top`) || Host(`clash.twbhub.top`) || Host(`clash.twbhub.com`) || Host(`go.cc.cc`)
+    - match: Host(`www.twbhub.com`) || Host(`twbhub.top`) || Host(`www.twbhub.top`) || Host(`clash.twbhub.top`) || Host(`clash.twbhub.com`) || Host(`go.cc.cc`) || Host(`clash.cc.cc`)
       middlewares:
         - name: websecure
       kind: Rule
