@@ -1,0 +1,81 @@
+
+---
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: ql-sts
+spec:
+  serviceName: ql-svc
+  replicas: 1
+  minReadySeconds: 5
+  updateStrategy:
+    type: RollingUpdate
+  selector:
+    matchLabels:
+      app: ql-container
+  volumeClaimTemplates:
+    - metadata:
+        name: ql-data
+      spec:
+        accessModes:
+          - ReadWriteOnce
+        storageClassName: local-path
+        resources:
+          requests:
+            storage: 2Gi
+  template:
+    metadata:
+      labels:
+        app: ql-container
+      annotations:
+        changeRollingUpdate: ${K8S_QL}
+    spec:
+      restartPolicy: Always
+      terminationGracePeriodSeconds: 10
+      containers:
+        - name: ql-container
+          image: whyour/qinglong:latest
+          imagePullPolicy: IfNotPresent
+          securityContext:
+            privileged: false
+          ports:
+            - name: cp
+              containerPort: 5700
+          env:
+            - name: TZ
+              valueFrom:
+                configMapKeyRef:
+                  name: global
+                  key: timezone
+          volumeMounts:
+            - name: ql-data
+              mountPath: /ql/data
+          readinessProbe:
+            initialDelaySeconds: 5
+            periodSeconds: 2
+            timeoutSeconds: 1
+            httpGet:
+              scheme: HTTP
+              port: cp
+          resources:
+            requests:
+              memory: 64Mi
+              cpu: 100m
+            limits:
+              memory: 256Mi
+              cpu: 500m
+
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: ql-svc
+spec:
+  selector:
+    app: ql-container
+  clusterIP: None
+  sessionAffinity: ClientIP
+  ports:
+    - name: sp
+      port: 80
+      targetPort: cp

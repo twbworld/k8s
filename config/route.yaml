@@ -144,7 +144,7 @@ metadata:
   name: worker-processes
 spec:
   inFlightReq:
-    amount: 2 #最大并行数, cpu核心数
+    amount: 20
 ---
 # 限流
 apiVersion: traefik.containo.us/v1alpha1
@@ -269,6 +269,13 @@ spec:
       services:
         - name: wrr
           kind: TraefikService
+    - match: Host(`ql.twbhub.com`) || Host(`ql.cc.cc`)
+      middlewares:
+        - name: websecure
+      kind: Rule
+      services:
+        - name: ql-svc
+          port: sp
     - match: Path(`/404.html`) || Path(`/40x.html`) || Path(`/50x.html`)
       kind: Rule
       services:
