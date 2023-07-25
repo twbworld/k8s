@@ -99,7 +99,7 @@ spec:
               ./server
           readinessProbe:
             initialDelaySeconds: 5
-            periodSeconds: 2
+            periodSeconds: 5
             timeoutSeconds: 1
             httpGet:
               scheme: HTTP

@@ -262,20 +262,27 @@ spec:
     #   services:
     #     - name: api@internal
     #       kind: TraefikService
-    - match: Host(`www.twbhub.com`) || Host(`twbhub.top`) || Host(`www.twbhub.top`) || Host(`clash.twbhub.top`) || Host(`clash.twbhub.com`) || Host(`go.cc.cc`) || Host(`clash.cc.cc`)
+    - match: Host(`www.twbhub.com`) || Host(`twbhub.top`) || Host(`www.twbhub.top`) || Host(`clash.twbhub.top`) || Host(`clash.twbhub.com`) || Host(`go.cc.cc`) || Host(`clash.cc.cc`) #订阅
       middlewares:
         - name: websecure
       kind: Rule
       services:
         - name: wrr
           kind: TraefikService
-    - match: Host(`ql.twbhub.com`) || Host(`ql.cc.cc`)
+    - match: Host(`ql.twbhub.com`) || Host(`ql.cc.cc`) #青龙面板
       middlewares:
         - name: websecure
       kind: Rule
       services:
         - name: ql-svc
           port: sp
+    - match: Host(`pan.twbhub.com`) || Host(`pan.cc.cc`) #临时网盘,用于临时下载指定目录下的资源
+      middlewares:
+        - name: websecure
+      kind: Rule
+      services:
+        - name: ql-svc
+          port: sp-pan
     - match: Path(`/404.html`) || Path(`/40x.html`) || Path(`/50x.html`)
       kind: Rule
       services:
