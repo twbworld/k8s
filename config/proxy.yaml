@@ -61,6 +61,13 @@ spec:
                   exit 1
               fi
               echo 'mysql已启动'
+          resources:
+            requests:
+              memory: 32Mi
+              cpu: 50m
+            limits:
+              memory: 512Mi
+              cpu: 1
       containers:
         - name: proxy-container
           image: ghcr.io/twbworld/proxy:0.1.2
@@ -110,8 +117,8 @@ spec:
               memory: 32Mi
               cpu: 50m
             limits:
-              memory: 256Mi
-              cpu: 400m
+              memory: 512Mi
+              cpu: 500m
 
 ---
 apiVersion: v1
