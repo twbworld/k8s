@@ -85,6 +85,20 @@ spec:
 apiVersion: traefik.containo.us/v1alpha1
 kind: Middleware
 metadata:
+  name: error-page-4xx
+spec:
+  errors:
+    status:
+      - "402-499"
+    query: /404.html
+    service: #服务需启动, 否则路由不生效
+      name: proxy-svc
+      port: sp
+---
+# 错误页
+apiVersion: traefik.containo.us/v1alpha1
+kind: Middleware
+metadata:
   name: error-page-5xx
 spec:
   errors:
@@ -95,20 +109,6 @@ spec:
       name: proxy-svc
       port: sp
 
----
-# 错误页
-apiVersion: traefik.containo.us/v1alpha1
-kind: Middleware
-metadata:
-  name: error-page-4xx
-spec:
-  errors:
-    status:
-      - "402-499"
-    query: /404.html
-    service:
-      name: proxy-svc
-      port: sp
 ---
 # 修改url
 apiVersion: traefik.containo.us/v1alpha1

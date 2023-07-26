@@ -67,6 +67,35 @@ spec:
         - name: cm
           configMap:
             name: ql-cm
+      initContainers:
+        - name: wait-proxy
+          image: alpine:latest
+          imagePullPolicy: IfNotPresent
+          command:
+            - sh
+            - -c
+            - |
+              set -e
+              sed -i 's/dl-cdn.alpinelinux.org/mirrors.aliyun.com/g' /etc/apk/repositories
+              apk add -f --no-cache curl
+              maxTries=15
+              while [ $maxTries -gt 0 ] && ! curl -sSf proxy-svc:8080 > /dev/null;do
+                  echo '等待proxy可用'
+                  sleep 1
+                  maxTries=$(( $maxTries - 1 ))
+              done
+              if [ $maxTries -le 0 ]; then
+                  echo >&2 'error: 尝试多次连接proxy服务失败'
+                  exit 1
+              fi
+              echo 'proxy已启动'
+          resources:
+            requests:
+              memory: 32Mi
+              cpu: 50m
+            limits:
+              memory: 256Mi
+              cpu: 500m
       containers:
         - name: ql-container
           image: whyour/qinglong:latest

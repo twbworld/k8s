@@ -117,8 +117,8 @@ spec:
               memory: 32Mi
               cpu: 50m
             limits:
-              memory: 512Mi
-              cpu: 500m
+              memory: 1Gi
+              cpu: 1
 
 ---
 apiVersion: v1
@@ -137,7 +137,7 @@ spec:
 
 ---
 #自动扩缩
-#压力测试: kubectl run --rm -it --image=busybox:1.28 --restart=Never load-generator -- /bin/sh -c "while sleep 0.01; do wget -q -O- http://proxy-svc:8080/index?u=test; done"
+#压力测试: kubectl run --rm -it --image=busybox:1.28 --restart=Never load-generator -- /bin/sh -c "while sleep 0.01; do wget -q -O- http://proxy-svc:8080/test.html; done"
 #需要给容器定义resources配置
 apiVersion: autoscaling/v2
 kind: HorizontalPodAutoscaler
