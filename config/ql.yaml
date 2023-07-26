@@ -76,10 +76,7 @@ spec:
               containerPort: 80
           env:
             - name: TZ
-              valueFrom:
-                configMapKeyRef:
-                  name: global
-                  key: timezone
+              value: Asia/Shanghai
           volumeMounts:
             - name: ql-data
               mountPath: /ql/data
@@ -160,8 +157,8 @@ spec:
               memory: 64Mi
               cpu: 100m
             limits:
-              memory: 512Mi
-              cpu: 1
+              memory: 256Mi
+              cpu: 500m
 
 ---
 apiVersion: v1
