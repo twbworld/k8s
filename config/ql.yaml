@@ -2,35 +2,6 @@
 # ql repo https://github.com/zero205/JD_tencent_scf.git "jd_|jx_|getJDCookie" "backUp|icon" "^jd[^_]|USER|sendNotify|sign_graphics_validate|JDJR|JDSign" "main"
 
 ---
-apiVersion: v1
-kind: ConfigMap
-metadata:
-  name: ql-cm
-data:
-  pan.conf: |-
-    #临时网盘,用于临时下载指定目录下的资源
-    server {
-        listen 80;
-        listen [::]:80;
-
-        error_page 404 =200 /404.html;
-        error_page 500 502 503 504 =200 /50x.html;
-        location ~ /50x.html|/404.html {
-            proxy_pass http://proxy-svc:8080;
-        }
-
-        location ~ ^/(\.user.ini|\.htaccess|\.git|\.svn|\.project|LICENSE|README.md){
-            return 404;
-        }
-
-        location / {
-            root /ql/data/pan/;
-            access_log off;
-        }
-
-    }
-
----
 apiVersion: apps/v1
 kind: StatefulSet
 metadata:
@@ -63,10 +34,6 @@ spec:
     spec:
       restartPolicy: Always
       terminationGracePeriodSeconds: 10
-      volumes:
-        - name: cm
-          configMap:
-            name: ql-cm
       initContainers:
         - name: wait-proxy
           image: alpine:latest
@@ -116,14 +83,64 @@ spec:
           volumeMounts:
             - name: ql-data
               mountPath: /ql/data
-            - name: cm
-              mountPath: /volume/cm/
           command:
             - /bin/sh
             - -c
             - |
+              cat >> docker/front.conf <<EOF
+              #临时网盘,用于临时下载指定目录下的资源
+              server {
+                  listen 80;
+                  listen [::]:80;
+
+                  error_page 404 =200 /404.html;
+                  error_page 500 502 503 504 =200 /50x.html;
+                  location ~ /50x.html|/404.html {
+                      proxy_pass http://proxy-svc:8080;
+                  }
+
+                  location ~ ^/(\.user.ini|\.htaccess|\.git|\.svn|\.project|LICENSE|README.md){
+                      return 404;
+                  }
+
+                  location / {
+                      root /ql/data/pan/;
+                      access_log off;
+                  }
+              }
+              #配置REMOTE_ADDR头; 从IP链排除的ip(对应"listen 127.0.0.1:443"的配置; 如不排除ip(如cdn平台的ip),则proxy_add_x_forwarded_for和proxy_protocol_addr就会带上,导致真实ip被隐藏)
+              #https://www.cloudflare.com/ips/
+              set_real_ip_from 127.0.0.0/24;
+              set_real_ip_from 172.1.0.0/16;
+              set_real_ip_from 10.40.0.0/16;
+              set_real_ip_from 10.41.0.0/16;
+              set_real_ip_from 10.42.0.0/16;
+              set_real_ip_from 10.43.0.0/16;
+              set_real_ip_from 10.44.0.0/16;
+              set_real_ip_from 173.245.48.0/20;
+              set_real_ip_from 103.21.244.0/22;
+              set_real_ip_from 103.22.200.0/22;
+              set_real_ip_from 103.31.4.0/22;
+              set_real_ip_from 141.101.64.0/18;
+              set_real_ip_from 108.162.192.0/18;
+              set_real_ip_from 190.93.240.0/20;
+              set_real_ip_from 188.114.96.0/20;
+              set_real_ip_from 197.234.240.0/22;
+              set_real_ip_from 198.41.128.0/17;
+              set_real_ip_from 162.158.0.0/15;
+              set_real_ip_from 104.16.0.0/13;
+              set_real_ip_from 104.24.0.0/14;
+              set_real_ip_from 172.64.0.0/13;
+              set_real_ip_from 131.0.72.0/22;
+              set_real_ip_from 2400:cb00::/32;
+              set_real_ip_from 2606:4700::/32;
+              set_real_ip_from 2803:f800::/32;
+              set_real_ip_from 2405:b500::/32;
+              set_real_ip_from 2405:8100::/32;
+              set_real_ip_from 2a06:98c0::/29;
+              set_real_ip_from 2c0f:f248::/32;
+              EOF
               mkdir -p /ql/data/pan/
-              cat /volume/cm/pan.conf >> docker/front.conf
               ./docker/docker-entrypoint.sh
           livenessProbe:
             initialDelaySeconds: 30
