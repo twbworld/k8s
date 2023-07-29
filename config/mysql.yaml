@@ -129,7 +129,7 @@ spec:
               # subPath: my.cnf #subPath挂载单个文件(缺点: configMap更新后, 挂载的文件不会更新)
             - name: log
               mountPath: /var/www/logs/
-              subPathExpr: mysql-$(UUID) #使用券下的目录,没有则创建
+              subPathExpr: mysql-$(UUID) #使用卷下的目录,没有则创建
             - name: mysql-data
               mountPath: /var/lib/mysql
           # lifecycle:

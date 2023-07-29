@@ -111,7 +111,7 @@ spec:
             httpGet:
               scheme: HTTP
               port: cp
-              path: /favicon.ico
+              path: /
           resources:
             requests:
               memory: 32Mi
