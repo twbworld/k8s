@@ -32,7 +32,7 @@ spec:
       - name: circuit-breaker
       - name: limit-req
       - name: redirect-https
-      - name: redirect-non-www
+      # - name: redirect-non-www
       - name: error-page-4xx
       - name: error-page-5xx
       - name: compress-gzip

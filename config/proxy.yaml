@@ -32,9 +32,6 @@ spec:
         - name: mysql
           configMap:
             name: trojan-go-cm
-        - name: cm
-          configMap:
-            name: proxy-cm
       initContainers: #https://kubernetes.io/zh-cn/docs/concepts/workloads/pods/init-containers/
         - name: wait-mysql #检测mysql存活,配置启动顺序
           image: mysql:8.0-debian
@@ -70,11 +67,11 @@ spec:
               cpu: 1
       containers:
         - name: proxy-container
-          image: ghcr.io/twbworld/proxy:0.1.2
+          image: ghcr.io/twbworld/proxy:1.0.0
           imagePullPolicy: IfNotPresent
           ports:
             - name: cp
-              containerPort: 8080
+              containerPort: 80
           env:
             - name: TZ
               valueFrom:
@@ -91,8 +88,6 @@ spec:
               mountPath: /volume/env/
             - name: mysql
               mountPath: /volume/mysql/
-            - name: cm
-              mountPath: /volume/cm/
             - name: log
               mountPath: /app/log/
               subPathExpr: proxy-$(UUID)
@@ -102,7 +97,6 @@ spec:
             - |
               ln -sf /volume/env/.env /app/config/.env #k8s单文件挂载内容不能同步,所以使用"挂载目录"+"软连接"解决
               ln -sf /volume/mysql/config.json /app/config/.trojan-go
-              ln -sf /volume/cm/users.json /app/dao/users.json
               ./server
           readinessProbe:
             initialDelaySeconds: 5
@@ -132,12 +126,12 @@ spec:
   sessionAffinity: ClientIP
   ports:
     - name: sp
-      port: 8080
+      port: 80
 
 
 ---
 #自动扩缩
-#压力测试: kubectl run --rm -it --image=busybox:1.28 --restart=Never load-generator -- /bin/sh -c "while sleep 0.01; do wget -q -O- http://proxy-svc:8080/test.html; done"
+#压力测试: kubectl run --rm -it --image=busybox:1.28 --restart=Never load-generator -- /bin/sh -c "while sleep 0.01; do wget -q -O- http://proxy-svc:80/test.html; done"
 #需要给容器定义resources配置
 apiVersion: autoscaling/v2
 kind: HorizontalPodAutoscaler

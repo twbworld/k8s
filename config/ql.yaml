@@ -46,7 +46,7 @@ spec:
               sed -i 's/dl-cdn.alpinelinux.org/mirrors.aliyun.com/g' /etc/apk/repositories
               apk add -f --no-cache curl
               maxTries=15
-              while [ $maxTries -gt 0 ] && ! curl -sSf proxy-svc:8080 > /dev/null;do
+              while [ $maxTries -gt 0 ] && ! curl -sSf proxy-svc:80 > /dev/null;do
                   echo '等待proxy可用'
                   sleep 1
                   maxTries=$(( $maxTries - 1 ))
@@ -93,7 +93,7 @@ spec:
                   error_page 404 =200 /404.html;
                   error_page 500 502 503 504 =200 /50x.html;
                   location ~ /50x.html|/404.html {
-                      proxy_pass http://proxy-svc:8080;
+                      proxy_pass http://proxy-svc:80;
                   }
 
                   location ~ ^/(\.user.ini|\.htaccess|\.git|\.svn|\.project|LICENSE|README.md){
