@@ -86,7 +86,7 @@ spec:
         - key: "" #key为空,设置容忍所有污点, 防止节点被设置污点
           operator: "Exists" #Equal(默认):key=value相同,需要设置value;"Exists":存在相同key值就符合
       restartPolicy: Always
-      priorityClassName: "system-cluster-critical" #绑定PriorityClass,用于设置pod优先级(重要性)
+      priorityClassName: system-cluster-critical #绑定PriorityClass,用于设置pod优先级(重要性)
       terminationGracePeriodSeconds: 10 #给即将被强制清除的pod的缓冲时间
       volumes:
         - name: cm

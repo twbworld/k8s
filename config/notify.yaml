@@ -73,7 +73,7 @@ spec:
       terminationGracePeriodSeconds: 10
       dnsPolicy: ClusterFirstWithHostNet
       serviceAccount: notify
-      priorityClassName: "system-node-critical"
+      priorityClassName: system-node-critical
       containers:
         - name: notify-container
           image: registry.aliyuncs.com/acs/kube-eventer:v1.2.7-ca03be0-aliyun

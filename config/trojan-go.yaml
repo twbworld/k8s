@@ -21,7 +21,7 @@ spec:
         changeRollingUpdate: ${K8S_TROJAN_GO}
     spec:
       restartPolicy: Always
-      priorityClassName: "system-cluster-critical"
+      priorityClassName: system-cluster-critical
       terminationGracePeriodSeconds: 10
       volumes:
         - name: cm
@@ -143,6 +143,17 @@ apiVersion: autoscaling/v2
 kind: HorizontalPodAutoscaler
 metadata:
   name: hpa-trojan-go
+status:
+  observedGeneration: 1
+  currentReplicas: 1
+  desiredReplicas: 1
+  currentMetrics:
+  - type: Resource
+    resource:
+      name: cpu
+      current:
+        averageUtilization: 0
+        averageValue: 0
 spec:
   scaleTargetRef:
     apiVersion: apps/v1
@@ -174,14 +185,3 @@ spec:
       - type: Percent
         value: 100
         periodSeconds: 15
-status:
-  observedGeneration: 1
-  currentReplicas: 1
-  desiredReplicas: 1
-  currentMetrics:
-  - type: Resource
-    resource:
-      name: cpu
-      current:
-        averageUtilization: 0
-        averageValue: 0
