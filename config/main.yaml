@@ -25,11 +25,19 @@ spec:
 apiVersion: scheduling.k8s.io/v1
 kind: PriorityClass
 metadata:
-  name: default-priority
+  name: default-pc
 value: 1000000000
 globalDefault: true
 description: "默认优先级类"
 
+---
+apiVersion: scheduling.k8s.io/v1
+kind: PriorityClass
+metadata:
+  name: low-pc
+value: 500000000
+globalDefault: false
+description: "低优先级类"
 # ---
 # apiVersion: v1
 # kind: List

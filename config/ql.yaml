@@ -33,6 +33,7 @@ spec:
         changeRollingUpdate: ${K8S_QL}
     spec:
       restartPolicy: Always
+      priorityClassName: low-pc
       terminationGracePeriodSeconds: 10
       initContainers:
         - name: wait-proxy

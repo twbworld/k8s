@@ -131,7 +131,7 @@ spec:
 
 ---
 #自动扩缩
-#压力测试: kubectl run --rm -it --image=busybox:1.28 --restart=Never load-generator -- /bin/sh -c "while sleep 0.01; do wget -q -O- http://proxy-svc:80/test.html; done"
+#压力测试: kubectl run --rm -it --image=busybox:latest --restart=Never test -- /bin/sh -c "while sleep 0.01; do wget -q -O- http://proxy-svc:80/test.html; done"
 #需要给容器定义resources配置
 apiVersion: autoscaling/v2
 kind: HorizontalPodAutoscaler
