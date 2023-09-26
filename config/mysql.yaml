@@ -134,12 +134,6 @@ spec:
               mountPath: /var/lib/mysql
           # lifecycle:
           #   postStart: #容器开始启动的钩子事件;与正常容器异步进行,且俩不分顺序
-          livenessProbe: #存活性探针;如不通过则pod重启(根据restartPolicy)
-            initialDelaySeconds: 30 #容器启动30秒后才开始探测;时间长点,避免重启
-            periodSeconds: 10 #重试的间隔时间
-            timeoutSeconds: 3 #连接超时
-            exec:
-              command: ["mysqladmin", "ping", "-h127.0.0.1"]
           readinessProbe: #就绪性探针;如不通过则pod被service暂时忽略(READY值为"0/1"),等待pod变为Ready状态
             initialDelaySeconds: 5 #这不需太久, 因为容器本来就待running状态
             periodSeconds: 2
@@ -149,6 +143,12 @@ spec:
                   - /bin/sh
                   - -c
                   - mysql -h127.0.0.1 -uroot -p$MYSQL_ROOT_PASSWORD -e "SELECT 1"
+          livenessProbe: #存活性探针;如不通过则pod重启(根据restartPolicy)
+            initialDelaySeconds: 30 #容器启动30秒后才开始探测;时间长点,避免重启
+            periodSeconds: 10 #重试的间隔时间
+            timeoutSeconds: 3 #连接超时
+            exec:
+              command: ["mysqladmin", "ping", "-h127.0.0.1"]
           resources:
             requests:
               memory: 128Mi
@@ -172,4 +172,4 @@ spec:
     - name: sp
       port: 3306 #对外端口
       targetPort: cp
-      # notePort: 30001 #type=NodePort生效;不指定则随机
+      # nodePort: 30001 #type=NodePort生效;不指定则随机

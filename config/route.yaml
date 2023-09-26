@@ -242,6 +242,14 @@ spec:
       services:
         - name: trojan-go-svc
           port: sp
+    - match: HostSNI(`frp.twbhub.top`) || HostSNI(`frp.cc.cc`)
+      services:
+        - name: frp-svc
+          port: sp
+    - match: HostSNI(`pve.twbhub.top`) || HostSNI(`pve.cc.cc`)
+      services:
+        - name: frp-svc
+          port: sp-pve
 ---
 #参数文档
 apiVersion: traefik.containo.us/v1alpha1

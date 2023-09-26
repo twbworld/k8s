@@ -1,0 +1,75 @@
+
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: frp-deploy
+spec:
+  replicas: 1
+  minReadySeconds: 5
+  strategy:
+    type: RollingUpdate
+  selector:
+    matchLabels:
+      app: frp-container
+  template:
+    metadata:
+      name: frp-deploy
+      labels:
+        app: frp-container
+      annotations:
+        changeRollingUpdate: ${K8S_frp}
+    spec:
+      restartPolicy: Always
+      terminationGracePeriodSeconds: 10
+      volumes:
+        - name: frp
+          configMap:
+            name: frp
+      containers:
+        - name: frp-container
+          image: snowdreamtech/frps:latest
+          imagePullPolicy: IfNotPresent
+          ports:
+            - name: cp
+              containerPort: 80
+            - name: cp-pve
+              containerPort: 443
+          volumeMounts:
+            - name: frp
+              mountPath: /etc/frp/
+          readinessProbe:
+            tcpSocket:
+              port: cp
+            initialDelaySeconds: 5
+            periodSeconds: 2
+            timeoutSeconds: 1
+          livenessProbe:
+            tcpSocket:
+              port: cp
+            initialDelaySeconds: 30
+            periodSeconds: 10
+            timeoutSeconds: 3
+          resources:
+            requests:
+              memory: 16Mi
+              cpu: 10m
+            limits:
+              memory: 128Mi
+              cpu: 500m
+
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: frp-svc
+spec:
+  selector:
+    app: frp-container
+  type: ClusterIP
+  sessionAffinity: ClientIP
+  ports:
+    - name: sp
+      port: 80
+    - name: sp-pve
+      port: 443

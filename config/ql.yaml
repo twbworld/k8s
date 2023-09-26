@@ -140,12 +140,6 @@ spec:
               EOF
               mkdir -p /ql/data/pan/
               ./docker/docker-entrypoint.sh
-          livenessProbe:
-            initialDelaySeconds: 30
-            periodSeconds: 10
-            timeoutSeconds: 3
-            exec:
-              command: ["curl", "-sf", "http://127.0.0.1:5400/api/health"]
           readinessProbe:
             initialDelaySeconds: 5
             periodSeconds: 2
@@ -153,6 +147,12 @@ spec:
             httpGet:
               scheme: HTTP
               port: cp
+          livenessProbe:
+            initialDelaySeconds: 30
+            periodSeconds: 10
+            timeoutSeconds: 3
+            exec:
+              command: ["curl", "-sf", "http://127.0.0.1:5400/api/health"]
           resources:
             requests:
               memory: 64Mi
