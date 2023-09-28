@@ -18,7 +18,7 @@ spec:
       labels:
         app: frp-container
       annotations:
-        changeRollingUpdate: ${K8S_frp}
+        changeRollingUpdate: ${K8S_FRP}
     spec:
       restartPolicy: Always
       terminationGracePeriodSeconds: 10
@@ -75,18 +75,5 @@ spec:
       port: 80
     - name: sp-pve
       port: 443
-
----
-#traefik始终无法代理ssh,妥协使用NodePort了
-apiVersion: v1
-kind: Service
-metadata:
-  name: frp-svc-ssh
-spec:
-  selector:
-    app: frp-container
-  type: NodePort
-  ports:
     - name: sp-ssh
       port: 22
-      nodePort: 32222

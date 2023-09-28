@@ -62,6 +62,9 @@ spec:
         port: 8080 #可在IngressRoute下的entryPoints使用;traefik会自动生成"--entrypoints.test.address"启动参数
         expose: false #将端口真正暴露到集群外;一旦设置,可分别在endpoint/service查到port/exposedPort
         exposedPort: 8080 #可忽略
+      ssh:
+        port: 2222
+        expose: true
     additionalArguments: #https://doc.traefik.io/traefik/reference/static-configuration/cli/
       - --api.insecure=false #不安全模式,允许HTTP方式访问 API(即dashboard,默认"--entrypoints.traefik.address=:8080",并暴露, 建议使用port-forward的方式)
       - --api.dashboard=false

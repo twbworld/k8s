@@ -251,6 +251,20 @@ spec:
         - name: frp-svc
           port: sp-pve
 ---
+#代理ssh不需要配置"tls"
+apiVersion: traefik.containo.us/v1alpha1
+kind: IngressRouteTCP
+metadata:
+  name: ssh
+spec:
+  entryPoints:
+    - ssh
+  routes:
+    - match: HostSNI(`*`)
+      services:
+        - name: frp-svc
+          port: sp-ssh
+---
 #参数文档
 apiVersion: traefik.containo.us/v1alpha1
 kind: IngressRoute #CRD(IngressRoute)和Ingress和Gateway API三种方式创建路由
