@@ -44,7 +44,7 @@ data:
   content: '{
     "chat_id": "370526622",
     "parse_mode": "MarkdownV2",
-    "text": "*notify通知* \n时间: `{{ .LastTimestamp }}` \n类型: `{{ .Type }}` \nkind: `{{ .InvolvedObject.Kind }}` \n原因: `{{ .Reason }}` \n详情:```text {{ .Message }}```"
+    "text": "*notify通知[pve]* \n时间: `{{ .LastTimestamp }}` \n类型: `{{ .Type }}` \nkind: `{{ .InvolvedObject.Kind }}` \n原因: `{{ .Reason }}` \n详情:```text {{ .Message }}```"
   }'
 
 ---
