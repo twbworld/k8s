@@ -296,8 +296,8 @@ spec:
         - name: websecure
       kind: Rule
       services:
-        - name: ql-svc
-          port: sp
+        - name: frp-svc
+          port: sp-ql
     - match: Host(`pan.twbhub.com`) || Host(`pan.cc.cc`) #临时网盘,用于临时下载指定目录下的资源
       middlewares:
         - name: websecure

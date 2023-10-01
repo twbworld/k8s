@@ -1,4 +1,4 @@
-
+# 复用22端口连接ssh: ssh -o 'proxycommand socat - PROXY:1.1.1.1:pve:22,proxyport=1234' root@pve
 ---
 apiVersion: apps/v1
 kind: Deployment
@@ -37,6 +37,8 @@ spec:
               containerPort: 443
             - name: cp-ssh
               containerPort: 22
+            - name: cp-ql
+              containerPort: 5700
           volumeMounts:
             - name: frp
               mountPath: /etc/frp/
@@ -77,3 +79,5 @@ spec:
       port: 443
     - name: sp-ssh
       port: 22
+    - name: sp-ql
+      port: 5700
