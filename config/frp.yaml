@@ -32,13 +32,13 @@ spec:
           imagePullPolicy: IfNotPresent
           ports:
             - name: cp
-              containerPort: 80
-            - name: cp-pve
               containerPort: 443
+            - name: cp-web
+              containerPort: 80
             - name: cp-ssh
               containerPort: 22
-            - name: cp-ql
-              containerPort: 5700
+            - name: cp-pve
+              containerPort: 8006
           volumeMounts:
             - name: frp
               mountPath: /etc/frp/
@@ -74,10 +74,10 @@ spec:
   sessionAffinity: ClientIP
   ports:
     - name: sp
-      port: 80
-    - name: sp-pve
       port: 443
+    - name: sp-web
+      port: 80
     - name: sp-ssh
       port: 22
-    - name: sp-ql
-      port: 5700
+    - name: sp-pve
+      port: 8006

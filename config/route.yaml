@@ -291,20 +291,13 @@ spec:
       services:
         - name: wrr
           kind: TraefikService
-    - match: Host(`ql.twbhub.com`) || Host(`ql.cc.cc`) #青龙面板
+    - match: Host(`ql.twbhub.com`) || Host(`pan.twbhub.com`) || Host(`ql.cc.cc`) || Host(`pan.cc.cc`)
       middlewares:
         - name: websecure
       kind: Rule
       services:
         - name: frp-svc
-          port: sp-ql
-    - match: Host(`pan.twbhub.com`) || Host(`pan.cc.cc`) #临时网盘,用于临时下载指定目录下的资源
-      middlewares:
-        - name: websecure
-      kind: Rule
-      services:
-        - name: ql-svc
-          port: sp-pan
+          port: sp-web
     - match: Path(`/404.html`) || Path(`/40x.html`) || Path(`/50x.html`)
       kind: Rule
       services:
