@@ -66,7 +66,7 @@ spec:
         port: 2222
         expose: true
       proxy:
-        port: 8443
+        port: 2057
         expose: true
     additionalArguments: #https://doc.traefik.io/traefik/reference/static-configuration/cli/
       - --api.insecure=false #不安全模式,允许HTTP方式访问 API(即dashboard,默认"--entrypoints.traefik.address=:8080",并暴露, 建议使用port-forward的方式)
