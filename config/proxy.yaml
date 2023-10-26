@@ -67,7 +67,7 @@ spec:
               cpu: 1
       containers:
         - name: proxy-container
-          image: ghcr.io/twbworld/proxy:1.1.0
+          image: ghcr.io/twbworld/proxy:1.1.1
           imagePullPolicy: IfNotPresent
           ports:
             - name: cp
@@ -169,7 +169,7 @@ spec:
       policies:
       - type: Percent
         value: 100
-        periodSeconds: 15 # 每[periodSeconds]最大允许扩容数量为当前Pod数量的[value]%
+        periodSeconds: 15 # 每[periodSeconds]秒最大允许扩容数量为当前Pod数量的[value]%
       - type: Pods
         value: 1
         periodSeconds: 15 # 每[periodSeconds]秒最大允许扩容[value]个 Pod

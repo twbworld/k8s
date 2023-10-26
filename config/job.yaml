@@ -105,7 +105,7 @@ spec:
                   echo 'mysql已启动'
           containers:
             - name: proxy-clear
-              image: ghcr.io/twbworld/proxy:1.1.0
+              image: ghcr.io/twbworld/proxy:1.1.1
               imagePullPolicy: IfNotPresent
               volumeMounts:
                 - name: env
@@ -169,7 +169,7 @@ spec:
                   echo 'mysql已启动'
           containers:
             - name: proxy-expiry
-              image: ghcr.io/twbworld/proxy:1.1.0
+              image: ghcr.io/twbworld/proxy:1.1.1
               imagePullPolicy: IfNotPresent
               volumeMounts:
                 - name: env
