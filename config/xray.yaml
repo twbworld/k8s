@@ -1,0 +1,174 @@
+
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: xray-deploy
+spec:
+  replicas: 1
+  minReadySeconds: 5
+  strategy:
+    type: RollingUpdate
+  selector:
+    matchLabels:
+      app: xray-container
+  template:
+    metadata:
+      name: xray-deploy
+      labels:
+        app: xray-container
+      annotations:
+        changeRollingUpdate: ${K8S_XRAY}
+    spec:
+      restartPolicy: Always
+      priorityClassName: system-cluster-critical
+      terminationGracePeriodSeconds: 10
+      volumes:
+        - name: cm
+          configMap:
+            name: xray-cm
+        - name: tls
+          secret:
+            secretName: tls-secret
+        - name: log
+          persistentVolumeClaim:
+            claimName: log
+      initContainers:
+        - name: wait-proxy
+          image: alpine:latest
+          imagePullPolicy: IfNotPresent
+          command:
+            - sh
+            - -c
+            - |
+              set -e
+              sed -i 's/dl-cdn.alpinelinux.org/mirrors.aliyun.com/g' /etc/apk/repositories
+              apk add -f --no-cache curl
+              maxTries=15
+              while [ $maxTries -gt 0 ] && ! curl -sSf proxy-svc:80 > /dev/null;do
+                  echo '等待proxy可用'
+                  sleep 1
+                  maxTries=$(( $maxTries - 1 ))
+              done
+              if [ $maxTries -le 0 ]; then
+                  echo >&2 'error: 尝试多次连接proxy服务失败'
+                  exit 1
+              fi
+              echo 'proxy已启动'
+          resources:
+            requests:
+              memory: 32Mi
+              cpu: 50m
+            limits:
+              memory: 256Mi
+              cpu: 500m
+      containers:
+        - name: xray-container
+          image: ghcr.io/xtls/xray-core:latest
+          imagePullPolicy: IfNotPresent
+          ports:
+            - name: cp
+              containerPort: 443
+            - name: cp-xtls
+              containerPort: 80
+            - name: cp-ws
+              containerPort: 8080
+          env:
+            - name: TZ
+              valueFrom:
+                configMapKeyRef:
+                  name: global
+                  key: timezone
+            - name: UUID
+              valueFrom:
+                fieldRef:
+                  apiVersion: v1
+                  fieldPath: metadata.uid
+          volumeMounts:
+            - name: cm
+              mountPath: /etc/xray/
+            - name: tls
+              mountPath: /root/cert/
+            - name: log
+              mountPath: /var/log/xray/
+              subPathExpr: xray-$(UUID)
+          livenessProbe:
+            initialDelaySeconds: 30
+            periodSeconds: 10
+            timeoutSeconds: 3
+            tcpSocket:
+              port: cp
+          resources:
+            requests:
+              memory: 64Mi
+              cpu: 100m
+            limits:
+              memory: 512Mi
+              cpu: 750m
+
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: xray-svc
+spec:
+  selector:
+    app: xray-container
+  type: NodePort
+  sessionAffinity: ClientIP
+  ports:
+    - name: sp
+      port: 443
+    - name: cp-xtls
+      port: 80
+    - name: cp-ws
+      port: 8080
+
+
+---
+apiVersion: autoscaling/v2
+kind: HorizontalPodAutoscaler
+metadata:
+  name: hpa-xray
+status:
+  observedGeneration: 1
+  currentReplicas: 1
+  desiredReplicas: 1
+  currentMetrics:
+  - type: Resource
+    resource:
+      name: cpu
+      current:
+        averageUtilization: 0
+        averageValue: 0
+spec:
+  scaleTargetRef:
+    apiVersion: apps/v1
+    kind: Deployment
+    name: xray-deploy
+  minReplicas: 1
+  maxReplicas: 4
+  metrics:
+  - type: Resource
+    resource:
+      name: cpu
+      target:
+        type: Utilization
+        averageUtilization: 80
+  behavior:
+    scaleUp:
+      stabilizationWindowSeconds: 0
+      policies:
+      - type: Percent
+        value: 100
+        periodSeconds: 15
+      - type: Pods
+        value: 2
+        periodSeconds: 15
+      selectPolicy: Max
+    scaleDown:
+      stabilizationWindowSeconds: 300
+      policies:
+      - type: Percent
+        value: 100
+        periodSeconds: 15

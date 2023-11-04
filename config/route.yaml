@@ -215,7 +215,7 @@ spec:
       priority: 2 #设定路由优先级;如有些"match"是默认优先级较低的模糊匹配
       kind: Rule
       services:
-        - name: proxy-svc
+        - name: pan-svc
           port: sp
     - match: PathPrefix(`/`) #匹配所有路径
       middlewares:
@@ -223,7 +223,7 @@ spec:
       priority: 1
       kind: Rule
       services:
-        - name: proxy-svc
+        - name: pan-svc
           port: sp
 
 ---
@@ -243,7 +243,19 @@ spec:
       services:
         - name: trojan-go-svc
           port: sp
-    - match: HostSNI(`frp.twbhub.top`) || HostSNI(`frp.cc.cc`)
+    - match: HostSNI(`r.twbhub.top`)
+      services:
+        - name: xray-svc
+          port: sp
+    - match: HostSNI(`x.twbhub.top`)
+      services:
+        - name: xray-svc
+          port: cp-xtls
+    - match: HostSNI(`xr.twbhub.top`)
+      services:
+        - name: xray-svc
+          port: cp-ws
+    - match: HostSNI(`frp.twbhub.com`) || HostSNI(`frp.cc.cc`)
       services:
         - name: frp-svc
           port: sp
@@ -304,7 +316,7 @@ spec:
     - match: Path(`/404.html`) || Path(`/40x.html`) || Path(`/50x.html`)
       kind: Rule
       services:
-        - name: proxy-svc
+        - name: pan-svc
           port: sp
     - match: PathPrefix(`/`) #匹配所有路径
       middlewares:
@@ -312,7 +324,7 @@ spec:
       priority: 1
       kind: Rule
       services:
-        - name: proxy-svc
+        - name: pan-svc
           port: sp
 
 #IngressRoute=========================end
