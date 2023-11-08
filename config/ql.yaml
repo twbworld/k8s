@@ -37,7 +37,7 @@ spec:
       terminationGracePeriodSeconds: 10
       containers:
         - name: ql-container
-          image: whyour/qinglong:latest
+          image: ghcr.io/whyour/qinglong:2.16
           imagePullPolicy: IfNotPresent
           securityContext:
             privileged: false
@@ -123,4 +123,3 @@ spec:
   ports:
     - name: sp
       port: 5700
-
