@@ -239,10 +239,6 @@ spec:
   tls:
     passthrough: true
   routes:
-    - match: HostSNI(`t.twbhub.top`) || HostSNI(`tr.twbhub.top`) || HostSNI(`test.cc.cc`)
-      services:
-        - name: trojan-go-svc
-          port: sp
     - match: HostSNI(`r.twbhub.top`)
       services:
         - name: xray-svc
