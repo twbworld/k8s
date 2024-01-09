@@ -95,8 +95,8 @@ spec:
             - "--sink=webhook:https://api.telegram.org/bot$TOKEN/sendMessage?level=Warning&custom_body_configmap=tg-body&custom_body_configmap_namespace=kube-system&header=Content-Type=application/json&method=POST"
           resources:
             requests:
-              memory: 50Mi
-              cpu: 100m
+              memory: 8Mi
+              cpu: 50m
             limits:
-              memory: 200Mi
-              cpu: 500m
+              memory: 64Mi
+              cpu: 150m
