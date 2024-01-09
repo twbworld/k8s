@@ -313,6 +313,11 @@ spec:
       services:
         - name: pan-svc
           port: sp
+    - match: Host(`go.cc.cc`)
+      kind: Rule
+      services:
+        - name: test-svc
+          port: sp
     - match: Path(`/404.html`) || Path(`/40x.html`) || Path(`/50x.html`)
       kind: Rule
       services:

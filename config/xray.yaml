@@ -55,17 +55,10 @@ spec:
                   exit 1
               fi
               echo 'proxy已启动'
-          resources:
-            requests:
-              memory: 32Mi
-              cpu: 50m
-            limits:
-              memory: 256Mi
-              cpu: 500m
       containers:
         - name: xray-container
           image: ghcr.io/xtls/xray-core:latest
-          imagePullPolicy: IfNotPresent
+          imagePullPolicy: Always
           ports:
             - name: cp
               containerPort: 443
@@ -100,10 +93,10 @@ spec:
               port: cp
           resources:
             requests:
-              memory: 64Mi
+              memory: 32Mi
               cpu: 100m
             limits:
-              memory: 512Mi
+              memory: 256Mi
               cpu: 750m
 
 ---

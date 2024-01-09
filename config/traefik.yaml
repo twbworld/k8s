@@ -1,44 +1,17 @@
 ---
-#为了避免不必要麻烦, 启动k3s时禁止启动traefik(启动时添加参数--disable=traefik), 改为手动执行当前文件, 否则k3s会在"/var/lib/rancher/k3s/server/manifests/"下生成含有HelmChart内容的traefik.yaml文件, 然后k3s会执行该目录(包括子目录)下的所有yaml
+#此文件建议放到"/var/lib/rancher/k3s/server/manifests/"下
+#k3s会自动安装traefik(需禁止则添加参数--disable=traefik): manifests/下生成traefik.yaml, k3s会执行该目录(包括子目录)下的所有yaml
 
 apiVersion: helm.cattle.io/v1
-kind: HelmChart
-metadata:
-  name: traefik-crd
-  namespace: kube-system
-spec:
-  chart: https://%{KUBERNETES_API}%/static/charts/traefik-crd-21.2.1+up21.2.0.tgz
----
-apiVersion: helm.cattle.io/v1
-kind: HelmChart
+kind: HelmChartConfig
 metadata:
   name: traefik
   namespace: kube-system
 spec:
-  chart: https://%{KUBERNETES_API}%/static/charts/traefik-21.2.1+up21.2.0.tgz
-  set:
-    global.systemDefaultRegistry: ""
   valuesContent: |-
-    podAnnotations:
-      prometheus.io/port: "8082"
-      prometheus.io/scrape: "true"
-    providers:
-      kubernetesIngress:
-        publishedService:
-          enabled: true
-    priorityClassName: "system-cluster-critical"
     image:
       repository: "rancher/mirrored-library-traefik"
-      tag: "2.9.10" #2.10
-    tolerations:
-    - key: "CriticalAddonsOnly"
-      operator: "Exists"
-    - key: "node-role.kubernetes.io/control-plane"
-      operator: "Exists"
-      effect: "NoSchedule"
-    - key: "node-role.kubernetes.io/master"
-      operator: "Exists"
-      effect: "NoSchedule"
+      tag: "2.10.5" #2.9.10
     service:
       ipFamilyPolicy: "PreferDualStack"
       spec:
@@ -57,7 +30,7 @@ spec:
     additionalArguments: #https://doc.traefik.io/traefik/reference/static-configuration/cli/
       - --api.insecure=false #不安全模式,允许HTTP方式访问 API(即dashboard,默认"--entrypoints.traefik.address=:8080",并暴露, 建议使用port-forward的方式)
       - --api.dashboard=false
-      - --experimental.kubernetesgateway #允许使用还处于实验的Gateway API; 需要配置Gateway API CRDs,否则报错
+      # - --experimental.kubernetesgateway #允许使用还处于实验的Gateway API; 需要配置Gateway API CRDs,否则报错
       - --providers.kubernetesgateway #启用Gateway API
       - --providers.kubernetesingress
       - --providers.kubernetesIngress.allowExternalNameServices #是否允许使用ExternalName的服务
@@ -65,8 +38,8 @@ spec:
       - --providers.kubernetescrd.allowExternalNameServices
       - --providers.kubernetescrd.allowCrossNamespace #是否允许跨命名空间
       - --entrypoints.websecure.http.tls=true #是否使用tls证书验证websecure端口流量;true:如果Ingress处配置了tls证书则优先,否则会使用traefik默认的证书
-      # - --entrypoints.web.http.redirections.entrypoint.permanent
-      - --entrypoints.web.http.redirections.entrypoint.to=https
+      - --entrypoints.web.http.redirections.entrypoint.to=websecure
+      # - --entrypoints.web.http.redirections.entrypoint.permanent #永久重定向
     #从IP链排除的ip(对应"listen 127.0.0.1:443"的配置; 如不排除ip(如cdn平台的ip),则proxy_add_x_forwarded_for和proxy_protocol_addr就会带上,导致真实ip被隐藏);
     #https://www.cloudflare.com/ips/
     proxyProtocol:

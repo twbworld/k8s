@@ -66,54 +66,23 @@ spec:
         spec:
           restartPolicy: Never
           volumes:
+            - name: sqlite-data
+              hostPath:
+                type: DirectoryOrCreate
+                path: /var/www/k8s/data/tmp/proxy
             - name: env
               configMap:
                 name: proxy-env
-            - name: trojan-go
-              configMap:
-                name: trojan-go-cm
-          initContainers:
-            - name: wait-mysql
-              image: mysql:8.0-debian
-              imagePullPolicy: IfNotPresent
-              env:
-                - name: TZ
-                  valueFrom:
-                    configMapKeyRef:
-                      name: global
-                      key: timezone
-                - name: MYSQL_ROOT_PASSWORD
-                  valueFrom:
-                    secretKeyRef:
-                      name: mysql-secret
-                      key: root-pwd
-              command:
-                - /bin/sh
-                - -c
-                - |-
-                  set -e
-                  maxTries=15
-                  while [ $maxTries -gt 0 ] && ! mysqladmin ping --connect-timeout=3 -s -hmysql-svc -uroot -p$MYSQL_ROOT_PASSWORD;do
-                      echo '等待mysql可用'
-                      sleep 1
-                      maxTries=$(( $maxTries - 1 ))
-                  done
-                  if [ $maxTries -le 0 ]; then
-                      echo >&2 'error: 尝试多次连接mysql服务失败'
-                      exit 1
-                  fi
-                  echo 'mysql已启动'
           containers:
             - name: proxy-clear
-              image: ghcr.io/twbworld/proxy:1.2.4
+              image: ghcr.io/twbworld/proxy:1.3.0
               imagePullPolicy: IfNotPresent
               volumeMounts:
+                - name: sqlite-data
+                  mountPath: /app/dao/
                 - name: env
                   mountPath: /app/config/.env
                   subPath: .env
-                - name: trojan-go
-                  mountPath: /app/config/.trojan-go
-                  subPath: config.json
               args: ["-a", "clear"]
 
 ---
@@ -130,52 +99,21 @@ spec:
         spec:
           restartPolicy: Never
           volumes:
+            - name: sqlite-data
+              hostPath:
+                type: DirectoryOrCreate
+                path: /var/www/k8s/data/tmp/proxy
             - name: env
               configMap:
                 name: proxy-env
-            - name: trojan-go
-              configMap:
-                name: trojan-go-cm
-          initContainers:
-            - name: wait-mysql
-              image: mysql:8.0-debian
-              imagePullPolicy: IfNotPresent
-              env:
-                - name: TZ
-                  valueFrom:
-                    configMapKeyRef:
-                      name: global
-                      key: timezone
-                - name: MYSQL_ROOT_PASSWORD
-                  valueFrom:
-                    secretKeyRef:
-                      name: mysql-secret
-                      key: root-pwd
-              command:
-                - /bin/sh
-                - -c
-                - |-
-                  set -e
-                  maxTries=15
-                  while [ $maxTries -gt 0 ] && ! mysqladmin ping --connect-timeout=3 -s -hmysql-svc -uroot -p$MYSQL_ROOT_PASSWORD;do
-                      echo '等待mysql可用'
-                      sleep 1
-                      maxTries=$(( $maxTries - 1 ))
-                  done
-                  if [ $maxTries -le 0 ]; then
-                      echo >&2 'error: 尝试多次连接mysql服务失败'
-                      exit 1
-                  fi
-                  echo 'mysql已启动'
           containers:
             - name: proxy-expiry
-              image: ghcr.io/twbworld/proxy:1.2.4
+              image: ghcr.io/twbworld/proxy:1.3.0
               imagePullPolicy: IfNotPresent
               volumeMounts:
+                - name: sqlite-data
+                  mountPath: /app/dao/
                 - name: env
                   mountPath: /app/config/.env
                   subPath: .env
-                - name: trojan-go
-                  mountPath: /app/config/.trojan-go
-                  subPath: config.json
               args: ["-a", "expiry"]
