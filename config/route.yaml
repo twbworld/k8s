@@ -235,7 +235,6 @@ metadata:
 spec:
   entryPoints:
     - websecure
-    - proxy
   tls:
     passthrough: true
   routes:
