@@ -234,6 +234,9 @@ spec:
       middlewares:
         - name: redirectregex
       kind: Rule
+      services:
+        - name: proxy-svc
+          port: sp
     - match: Path(`/404.html`) || Path(`/40x.html`) || Path(`/50x.html`)
       priority: 2 #设定路由优先级;如有些"match"是默认优先级较低的模糊匹配
       kind: Rule
@@ -316,6 +319,9 @@ spec:
       middlewares:
         - name: redirectregex2
       kind: Rule
+      services:
+        - name: proxy-svc
+          port: sp
     - match: Host(`www.twbhub.top`) || Host(`clash.twbhub.top`) || Host(`go.cc.cc`) || Host(`clash.cc.cc`) #订阅
       middlewares:
         - name: websecure
