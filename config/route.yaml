@@ -15,17 +15,6 @@ metadata:
   name: redirectregex
 spec:
   redirectRegex:
-    regex: ^http://twbhub.com/(.*)
-    replacement: http://twbhub.top/${1}
-    permanent: true
-
----
-apiVersion: traefik.io/v1alpha1
-kind: Middleware
-metadata:
-  name: redirectregex2
-spec:
-  redirectRegex:
     regex: ^https://twbhub.com/(.*)
     replacement: https://twbhub.top/${1}
     permanent: true
@@ -219,38 +208,20 @@ spec:
         sticky:
           cookie:
             name: c-pod #同上,此处去到指定pod
-
 ---
+#代理ssh不需要配置"tls"
 apiVersion: traefik.containo.us/v1alpha1
-kind: IngressRoute
+kind: IngressRouteTCP
 metadata:
-  name: page-not-found
+  name: ssh
 spec:
   entryPoints:
-    - web
-    - test
+    - ssh
   routes:
-    - match: Host(`twbhub.com`)
-      middlewares:
-        - name: redirectregex
-      kind: Rule
+    - match: HostSNI(`*`)
       services:
-        - name: proxy-svc
-          port: sp
-    - match: Path(`/404.html`) || Path(`/40x.html`) || Path(`/50x.html`)
-      priority: 2 #设定路由优先级;如有些"match"是默认优先级较低的模糊匹配
-      kind: Rule
-      services:
-        - name: pan-svc
-          port: sp
-    - match: PathPrefix(`/`) #匹配所有路径
-      middlewares:
-        - name: url404 #因为traefik找不到路由的默认页面简陋,重定向到指定页面
-      priority: 1
-      kind: Rule
-      services:
-        - name: pan-svc
-          port: sp
+        - name: frp-svc
+          port: sp-ssh
 
 ---
 #四层网络SNI分流(只能用于Tls)
@@ -282,20 +253,6 @@ spec:
           port: sp
 
 ---
-#代理ssh不需要配置"tls"
-apiVersion: traefik.containo.us/v1alpha1
-kind: IngressRouteTCP
-metadata:
-  name: ssh
-spec:
-  entryPoints:
-    - ssh
-  routes:
-    - match: HostSNI(`*`)
-      services:
-        - name: frp-svc
-          port: sp-ssh
----
 #参数文档
 apiVersion: traefik.containo.us/v1alpha1
 kind: IngressRoute #CRD(IngressRoute)和Ingress和Gateway API三种方式创建路由
@@ -307,7 +264,7 @@ spec:
   tls:
     secretName: tls-secret
   routes:
-    # - match: Host(`admin.cc.cc`)
+    # - match: Host(`admin.twbhub.top`)
     #   kind: Rule
     #   middlewares:
     #     - name: websecure
@@ -317,12 +274,12 @@ spec:
     #       kind: TraefikService
     - match: Host(`twbhub.com`)
       middlewares:
-        - name: redirectregex2
+        - name: redirectregex
       kind: Rule
       services:
         - name: proxy-svc
           port: sp
-    - match: Host(`www.twbhub.top`) || Host(`clash.twbhub.top`) || Host(`go.cc.cc`) || Host(`clash.cc.cc`) #订阅
+    - match: Host(`www.twbhub.top`) || Host(`clash.twbhub.top`) || Host(`go.cc.cc`) #订阅
       middlewares:
         - name: websecure
       kind: Rule
@@ -341,23 +298,18 @@ spec:
       services:
         - name: pan-svc
           port: sp
-    - match: Host(`go.cc.cc`)
-      kind: Rule
-      services:
-        - name: test-svc
-          port: sp
     - match: Path(`/404.html`) || Path(`/40x.html`) || Path(`/50x.html`)
       kind: Rule
       services:
-        - name: pan-svc
+        - name: proxy-svc #pan-svc
           port: sp
     - match: PathPrefix(`/`) #匹配所有路径
       middlewares:
-        - name: url404
-      priority: 1
+        - name: url404 #因为traefik找不到路由的默认页面简陋,重定向到指定页面
+      priority: 1  #设定路由优先级;如有些"match"是默认优先级较低的模糊匹配
       kind: Rule
       services:
-        - name: pan-svc
+        - name: proxy-svc #pan-svc
           port: sp
 
 #IngressRoute=========================end

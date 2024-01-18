@@ -37,9 +37,10 @@ spec:
       - --providers.kubernetescrd
       - --providers.kubernetescrd.allowExternalNameServices
       - --providers.kubernetescrd.allowCrossNamespace #是否允许跨命名空间
-      - --entrypoints.websecure.http.tls=true #是否使用tls证书验证websecure端口流量;true:如果Ingress处配置了tls证书则优先,否则会使用traefik默认的证书
-      - --entrypoints.web.http.redirections.entrypoint.to=websecure
-      # - --entrypoints.web.http.redirections.entrypoint.permanent #永久重定向
+      - --entrypoints.websecure.http.tls=true #是否使用tls证书验证websecure端口流量;true:如果Ingress处配置了tls证书则优先,否则会使用traefik默认的证书;(这websecure指8443, 但入口依然是443)
+      - --entrypoints.web.http.redirections.entrypoint.to=:443
+      - --entrypoints.web.http.redirections.entryPoint.scheme=https
+      - --entrypoints.web.http.redirections.entrypoint.permanent #永久重定向
     #从IP链排除的ip(对应"listen 127.0.0.1:443"的配置; 如不排除ip(如cdn平台的ip),则proxy_add_x_forwarded_for和proxy_protocol_addr就会带上,导致真实ip被隐藏);
     #https://www.cloudflare.com/ips/
     proxyProtocol:
