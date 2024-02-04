@@ -85,18 +85,18 @@ spec:
             - name: log
               mountPath: /var/log/xray/
               subPathExpr: xray-$(UUID)
-          livenessProbe:
-            initialDelaySeconds: 30
-            periodSeconds: 10
-            timeoutSeconds: 3
+          readinessProbe:
+            initialDelaySeconds: 5
+            periodSeconds: 5
+            timeoutSeconds: 1
             tcpSocket:
               port: cp
           resources:
             requests:
-              memory: 32Mi
-              cpu: 100m
+              memory: 128Mi
+              cpu: 500m
             limits:
-              memory: 256Mi
+              memory: 160Mi
               cpu: 750m
 
 ---

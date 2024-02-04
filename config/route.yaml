@@ -235,15 +235,15 @@ spec:
   tls:
     passthrough: true
   routes:
-    - match: HostSNI(`r.twbhub.top`)
+    - match: HostSNI(`r.twbhub.com`) || HostSNI(`r.twbhub.top`)
       services:
         - name: xray-svc
           port: sp
-    - match: HostSNI(`x.twbhub.top`)
+    - match: HostSNI(`x.twbhub.com`) || HostSNI(`x.twbhub.top`)
       services:
         - name: xray-svc
           port: cp-xtls
-    - match: HostSNI(`xr.twbhub.top`)
+    - match: HostSNI(`xr.twbhub.com`) || HostSNI(`xr.twbhub.top`)
       services:
         - name: xray-svc
           port: cp-ws
