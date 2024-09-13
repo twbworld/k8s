@@ -38,6 +38,8 @@ spec:
       - --providers.kubernetescrd.allowExternalNameServices
       - --providers.kubernetescrd.allowCrossNamespace #是否允许跨命名空间
       - --entrypoints.websecure.http.tls=true #是否使用tls证书验证websecure端口流量;true:如果Ingress处配置了tls证书则优先,否则会使用traefik默认的证书;(这websecure指8443, 但入口依然是443)
+      - --entrypoints.websecure.forwardedHeaders.insecure #获取真实ip
+      - --entrypoints.web.forwardedHeaders.insecure  #获取真实ip
       - --entrypoints.web.http.redirections.entrypoint.to=:443
       - --entrypoints.web.http.redirections.entryPoint.scheme=https
       - --entrypoints.web.http.redirections.entrypoint.permanent #永久重定向
@@ -46,6 +48,8 @@ spec:
     proxyProtocol:
       enabled: true
       trustedIPs:
+        - 134.175.168.189
+        - 121.4.195.125
         - 127.0.0.0/24
         - 192.168.0.0/16
         - 172.1.0.0/16
@@ -79,6 +83,8 @@ spec:
     forwardedHeaders:
       enabled: true
       trustedIPs:
+        - 134.175.168.189
+        - 121.4.195.125
         - 127.0.0.0/24
         - 192.168.0.0/16
         - 172.1.0.0/16

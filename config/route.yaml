@@ -142,7 +142,9 @@ spec:
     stsIncludeSubdomains: true #启用HSTS;要求浏览器总是通过 https
     stsPreload: true #启用HSTS;要求浏览器总是http跳转到https
     customResponseHeaders:
-      wall: "Hi! Welcome!"
+      Wall: "Hi! Welcome!"
+      Strict-Transport-Security: 'max-age=31536000' #启用HSTS;要求浏览器总是通过 https
+      Alt-Svc: 'quic=":443"; h3-27=":443";h3-25=":443"; h3-T050=":443"; h3-Q050=":443";h3-Q049=":443";h3-Q048=":443"; h3-Q046=":443"; h3-Q043=":443"' #备选服务
 
 ---
 # 并行
@@ -286,6 +288,13 @@ spec:
       services:
         - name: wrr
           kind: TraefikService
+    - match: Host(`dating.twbhub.top`) #小程序
+      middlewares:
+        - name: websecure
+      kind: Rule
+      services:
+        - name: dating-svc
+          port: sp
     - match: Host(`ql.twbhub.top`) || Host(`ql.cc.cc`)
       middlewares:
         - name: websecure
