@@ -18,7 +18,7 @@ spec:
       labels:
         app: dating-container
       annotations:
-        changeRollingUpdate: ${K8S_datinga}
+        changeRollingUpdate: ${K8S_dating}
     spec:
       restartPolicy: Always
       terminationGracePeriodSeconds: 10
@@ -39,7 +39,7 @@ spec:
             name: dating-config
       containers:
         - name: dating-container
-          image: ghcr.io/twbworld/dating:1.0.1
+          image: ghcr.io/twbworld/dating:1.2.3
           imagePullPolicy: IfNotPresent
           ports:
             - name: cp
@@ -80,11 +80,11 @@ spec:
               path: /
           resources:
             requests:
-              memory: 128Mi
+              memory: 4Mi
               cpu: 500m
             limits:
-              memory: 160Mi
-              cpu: 750m
+              memory: 64Mi
+              cpu: 1
 
 ---
 apiVersion: v1

@@ -8,7 +8,7 @@ metadata:
   name: pan-nginx-cm
 data:
   nginx.conf: |
-    user  www-data;
+    user nginx;
     worker_processes  auto;
     worker_shutdown_timeout 10s;
 
@@ -90,8 +90,11 @@ data:
         }
 
         server {
-            listen 80;
+            listen 80; #不能proxy_protocol,否则k8s存活检测失败
+            listen 443 proxy_protocol;
             listen [::]:80;
+            listen [::]:443 proxy_protocol;
+            http2 on; #xray的fallback回落需要h2
 
             error_page 404 =200 /404.html;
             error_page 500 502 503 504 =200 /50x.html;
@@ -151,11 +154,13 @@ spec:
             claimName: log
       containers:
         - name: pan-container
-          image: nginx:1.25
+          image: nginx:1.27-alpine
           imagePullPolicy: IfNotPresent
           ports:
             - name: cp
               containerPort: 80
+            - name: cp-fallback
+              containerPort: 443
           env:
             - name: TZ
               valueFrom:
@@ -184,13 +189,13 @@ spec:
               scheme: HTTP
               port: cp
               path: /index.html
-          # resources:
-          #   requests:
-          #     memory: 32Mi
-          #     cpu: 100m
-          #   limits:
-          #     memory: 256Mi
-          #     cpu: 1000m
+          resources:
+            requests:
+              memory: 8Mi
+              cpu: 100m
+            limits:
+              memory: 128Mi
+              cpu: 1000m
 
 ---
 apiVersion: v1
@@ -205,3 +210,5 @@ spec:
   ports:
     - name: sp
       port: 80
+    - name: sp-fallback
+      port: 443

@@ -26,13 +26,13 @@ spec:
         - name: sqlite-data
           hostPath:
             type: DirectoryOrCreate
-            path: /var/www/k8s/data/tmp/proxy
+            path: /var/www/k8s/data/tmp/proxy/tmp/
         - name: log
           persistentVolumeClaim:
             claimName: log
-        - name: env
+        - name: config
           configMap:
-            name: proxy-env
+            name: proxy-config
       # initContainers: #https://kubernetes.io/zh-cn/docs/concepts/workloads/pods/init-containers/
       #   - name: wait-mysql #检测mysql存活,配置启动顺序
       #     image: mysql:8.0-debian
@@ -68,7 +68,7 @@ spec:
       #         cpu: 1
       containers:
         - name: proxy-container
-          image: ghcr.io/twbworld/proxy:1.3.3
+          image: ghcr.io/twbworld/proxy:1.4.2
           imagePullPolicy: IfNotPresent
           ports:
             - name: cp
@@ -86,9 +86,9 @@ spec:
                   fieldPath: metadata.uid
           volumeMounts:
             - name: sqlite-data
-              mountPath: /app/dao/
-            - name: env
-              mountPath: /volume/env/
+              mountPath: /app/tmp/
+            - name: config
+              mountPath: /volume/config/
             - name: log
               mountPath: /app/log/
               subPathExpr: proxy-$(UUID)
@@ -96,8 +96,8 @@ spec:
             - /bin/sh
             - -c
             - |
-              ln -sf /volume/env/.env /app/config/.env #k8s单文件挂载内容不能同步,所以使用"挂载目录"+"软连接"解决
-              ./server
+              ./server -c /volume/config/config.yaml
+              # ln -sf /volume/config/config.yaml /app/config.yaml #k8s单文件挂载内容不能同步,所以使用"挂载目录"+"软连接"解决
           readinessProbe:
             initialDelaySeconds: 5
             periodSeconds: 5
@@ -108,11 +108,11 @@ spec:
               path: /
           resources:
             requests:
-              memory: 128Mi
+              memory: 4Mi
               cpu: 500m
             limits:
-              memory: 160Mi
-              cpu: 750m
+              memory: 64Mi
+              cpu: 1
 
 ---
 apiVersion: v1

@@ -34,7 +34,7 @@ spec:
           persistentVolumeClaim:
             claimName: log
       initContainers:
-        - name: wait-proxy
+        - name: wait-pan
           image: alpine:latest
           imagePullPolicy: IfNotPresent
           command:
@@ -45,16 +45,16 @@ spec:
               sed -i 's/dl-cdn.alpinelinux.org/mirrors.aliyun.com/g' /etc/apk/repositories
               apk add -f --no-cache curl
               maxTries=15
-              while [ $maxTries -gt 0 ] && ! curl -sSf proxy-svc:80 > /dev/null;do
-                  echo '等待proxy可用'
+              while [ $maxTries -gt 0 ] && ! curl -sSf pan-svc:80 > /dev/null;do
+                  echo '等待pan可用'
                   sleep 1
                   maxTries=$(( $maxTries - 1 ))
               done
               if [ $maxTries -le 0 ]; then
-                  echo >&2 'error: 尝试多次连接proxy服务失败'
+                  echo >&2 'error: 尝试多次连接pan服务失败'
                   exit 1
               fi
-              echo 'proxy已启动'
+              echo 'pan已启动'
       containers:
         - name: xray-container
           image: ghcr.io/xtls/xray-core:latest
@@ -93,11 +93,11 @@ spec:
               port: cp
           resources:
             requests:
-              memory: 128Mi
+              memory: 16Mi
               cpu: 500m
             limits:
-              memory: 160Mi
-              cpu: 750m
+              memory: 256Mi
+              cpu: 1
 
 ---
 apiVersion: v1

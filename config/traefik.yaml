@@ -37,6 +37,7 @@ spec:
       - --providers.kubernetescrd
       - --providers.kubernetescrd.allowExternalNameServices
       - --providers.kubernetescrd.allowCrossNamespace #是否允许跨命名空间
+      - --entrypoints.websecure.http2.maxConcurrentStreams=250
       - --entrypoints.websecure.http.tls=true #是否使用tls证书验证websecure端口流量;true:如果Ingress处配置了tls证书则优先,否则会使用traefik默认的证书;(这websecure指8443, 但入口依然是443)
       - --entrypoints.websecure.forwardedHeaders.insecure #获取真实ip
       - --entrypoints.web.forwardedHeaders.insecure  #获取真实ip

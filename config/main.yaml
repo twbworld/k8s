@@ -4,8 +4,6 @@ kind: Namespace
 metadata:
   name: dev
 
-
-
 ---
 #持久卷声明: pod向集群申请持久卷, sc会分配到合适的pv
 apiVersion: v1
@@ -38,6 +36,7 @@ metadata:
 value: 500000000
 globalDefault: false
 description: "低优先级类"
+
 # ---
 # apiVersion: v1
 # kind: List
