@@ -20,7 +20,7 @@
 * 证书更新(k8s更新secret证书后,traefik会自动reload)
   ``` sh
   ...
-    acme.sh --install-cert -d xxx.top -d "xxx.top" -d "*.xxx.top" -d "xxx.com" -d "*.xxx.com" \
+    acme.sh --install-cert -d "xxx.top" -d "xxx.top" -d "*.xxx.top" -d "xxx.com" -d "*.xxx.com" \
         --key-file /var/www/k8s/data/cert/xxx.com_top/key.pem \
         --fullchain-file /var/www/k8s/data/cert/xxx.com_top/cert.pem \
         --reloadcmd "cd /var/www/k8s/ && kubectl create secret tls tls-secret --cert=/var/www/k8s/data/cert/xxx.com_top/cert.pem --key=/var/www/k8s/data/cert/xxx.com_top/key.pem --dry-run -o yaml |kubectl apply -f - && git checkout -- yaml-reload.sh && ./yaml-reload.sh xray && exit"

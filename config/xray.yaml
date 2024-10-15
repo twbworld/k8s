@@ -29,7 +29,7 @@ spec:
             name: xray-cm
         - name: tls
           secret:
-            secretName: tls-secret
+            secretName: xray-secret
         - name: log
           persistentVolumeClaim:
             claimName: log
@@ -112,9 +112,9 @@ spec:
   ports:
     - name: sp
       port: 443
-    - name: cp-xtls
+    - name: sp-xtls
       port: 80
-    - name: cp-ws
+    - name: sp-ws
       port: 8080
 
 

@@ -98,7 +98,7 @@ data:
 
             error_page 404 =200 /404.html;
             error_page 500 502 503 504 =200 /50x.html;
-            add_header wall  "Hi! twbhub.com!";
+            add_header wall  "Hi!";
 
             location ~ /50x.html|/404.html {
                 root /usr/share/nginx/html/;
@@ -194,8 +194,8 @@ spec:
               memory: 8Mi
               cpu: 100m
             limits:
-              memory: 128Mi
-              cpu: 1000m
+              memory: 64Mi
+              cpu: 1
 
 ---
 apiVersion: v1
