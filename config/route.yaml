@@ -324,9 +324,10 @@ spec:
   tls:
     secretName: xray-secret
   routes:
-    - match: Host(`404502.xyz`) || Host(`twbhub.com`)
+    - match: Host(`404502.xyz`) || Host(`www.404502.xyz`) || Host(`twbhub.com`) || Host(`www.twbhub.com`)
       middlewares:
-        - name: redirectregex
+        # - name: redirectregex
+        - name: redirect-non-www
       kind: Rule
       services:
         - name: proxy-svc
