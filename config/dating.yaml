@@ -39,7 +39,7 @@ spec:
             name: dating-config
       containers:
         - name: dating-container
-          image: ghcr.io/twbworld/dating:1.3.2
+          image: ghcr.io/twbworld/dating:1.3.3
           imagePullPolicy: IfNotPresent
           ports:
             - name: cp
@@ -80,10 +80,10 @@ spec:
               path: /
           resources:
             requests:
-              memory: 32Mi
+              memory: 160Mi
               cpu: 300m
             limits:
-              memory: 128Mi
+              memory: 320Mi
               cpu: 1
 
 ---

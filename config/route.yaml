@@ -280,6 +280,13 @@ spec:
       services:
         - name: wrr
           kind: TraefikService
+    - match: Host(`ai.twbhub.top`)
+      middlewares:
+        - name: websecure
+      kind: Rule
+      services:
+        - name: ai-svc
+          port: sp
     - match: Host(`dating.twbhub.top`) #小程序
       middlewares:
         - name: websecure

@@ -191,10 +191,10 @@ spec:
               path: /index.html
           resources:
             requests:
-              memory: 8Mi
-              cpu: 100m
+              memory: 128Mi
+              cpu: 250m
             limits:
-              memory: 64Mi
+              memory: 256Mi
               cpu: 1
 
 ---
