@@ -66,8 +66,6 @@ spec:
       name: notify-deploy
       labels:
         app: notify-container
-      annotations:
-        changeRollingUpdate: ${K8S_NOTIFY}
     spec:
       restartPolicy: Always
       terminationGracePeriodSeconds: 10
@@ -84,6 +82,7 @@ spec:
                 configMapKeyRef:
                   name: global
                   key: timezone
+                  optional: true
             - name: TOKEN
               valueFrom:
                 configMapKeyRef:

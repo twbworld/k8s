@@ -1,135 +1,79 @@
-#需要配置IngressRoute CRD才能使用traefik.containo.us资源, k3s启动时安装traefik后已顺带配置好了
-#需要配置Gateway API CRD才能使用gateway.networking.k8s.io资源(traefik目前支持v0.4, 即gateway.networking.k8s.io/v1alpha2)
-
-#Gateway API CRD配置代码:config/crd/gateway-api.yaml(源码:https://github.com/kubernetes-sigs/gateway-api/tree/v0.4.0/config/v1alpha2)
-#route使用参考代码: https://github.com/kubernetes-sigs/gateway-api/tree/v0.4.0/examples/v1alpha2
-
+#需配置Gateway API CRD(位于config/gateway-api.yaml)才能使用gateway.networking.k8s.io资源
+#k3s已自动配置IngressRoute CRD
+#route使用参考代码: https://github.com/kubernetes-sigs/gateway-api/tree/main/examples
 #对tls设置sni规则时发现, 优先级:IngressRouteTCP > TLSRoute; 即优先级:IngressRoute模式 > Gateway API模式
 #设置http规则时发现, 优先级:HTTPRoute > IngressRoute; 即优先级:Gateway API模式 > IngressRoute模式
 #使用IngressRoute模式同时设置"IngressRouteTCP"的sni规则和"IngressRoute"验证https, 即优先级:IngressRoute > IngressRouteTCP
 
-#IngressRoute=========================begin
+#traefik中间件(优先使用Gateway API标准设置而不是中间件设置; 如设置filters.type)================begin
+--- #公用规则合并
 apiVersion: traefik.io/v1alpha1
 kind: Middleware
 metadata:
-  name: redirectregex
-spec:
-  redirectRegex:
-    regex: ^https://(404502.xyz|twbhub.com)/(.*)
-    replacement: https://twbhub.top/${1}
-    permanent: true
-
----
-apiVersion: traefik.containo.us/v1alpha1
-kind: TLSOption
-metadata:
-  name: tls-version
-spec:
-  minVersion: VersionTLS12
-
----
-#规则重用
-apiVersion: traefik.containo.us/v1alpha1
-kind: Middleware
-metadata:
-  name: websecure
+  name: common
 spec:
   chain:
     middlewares:
       - name: worker-processes
-      - name: circuit-breaker
       - name: limit-req
-      - name: redirect-https
-      # - name: redirect-non-www
-      - name: error-page-4xx
-      - name: error-page-5xx
-      - name: compress-gzip
+      - name: circuit-breaker
+--- #https规则合并
+apiVersion: traefik.io/v1alpha1
+kind: Middleware
+metadata:
+  name: http
+spec:
+  chain:
+    middlewares:
+      - name: common
+      # - name: http2https
+      - name: compress
       - name: add-header
----
-#密码授权验证
-apiVersion: traefik.containo.us/v1alpha1
+      - name: error-4xx
+      - name: error-5xx
+--- #并行
+apiVersion: traefik.io/v1alpha1
 kind: Middleware
 metadata:
-  name: traefik-dashboard-auth
+  name: worker-processes
 spec:
-  basicAuth:
-    secret: traefik-dashboard
-    removeHeader: true #删除验证头
-
----
-#强制转https
-apiVersion: traefik.containo.us/v1alpha1
+  inFlightReq:
+    amount: 10
+--- #限流
+apiVersion: traefik.io/v1alpha1
 kind: Middleware
 metadata:
-  name: redirect-https
+  name: limit-req
 spec:
-  redirectScheme:
-    scheme: https
-    permanent: false #永久重定向
-
----
-#www三级域名转二级域名
-apiVersion: traefik.containo.us/v1alpha1
+  rateLimit: # 1s内接收的平均请求数不大于average，高峰最大burst
+    average: 100
+    burst: 200
+--- #熔断
+apiVersion: traefik.io/v1alpha1
 kind: Middleware
 metadata:
-  name: redirect-non-www
+  name: circuit-breaker
 spec:
-  redirectRegex:
-    regex: ^https://www\.(.*)
-    replacement: https://${1}
-    permanent: false
-
----
-#gzip压缩
-apiVersion: traefik.containo.us/v1alpha1
+  circuitBreaker:
+    expression: LatencyAtQuantileMS(70.0) > 2000 || NetworkErrorRatio() > 0.5 || ResponseCodeRatio(500, 600, 0, 600) > 0.5 #达70.0%(要有小数点)流量的网络延迟超2秒, 或网络错误率达50%, 或50%流量返回5XX 触发
+--- #强制转https(traefik初始配置已设, 这冗余)
+# apiVersion: traefik.io/v1alpha1
+# kind: Middleware
+# metadata:
+#   name: http2https
+# spec:
+#   redirectScheme:
+#     scheme: https
+#     permanent: true #?308:307 重定向
+--- #gzip压缩
+apiVersion: traefik.io/v1alpha1
 kind: Middleware
 metadata:
-  name: compress-gzip
+  name: compress
 spec:
   compress: {}
-
----
-# 错误页
-apiVersion: traefik.containo.us/v1alpha1
-kind: Middleware
-metadata:
-  name: error-page-4xx
-spec:
-  errors:
-    status:
-      - "402-499"
-    query: /404.html
-    service: #服务需启动, 否则路由不生效
-      name: proxy-svc #pan-svc
-      port: sp
----
-# 错误页
-apiVersion: traefik.containo.us/v1alpha1
-kind: Middleware
-metadata:
-  name: error-page-5xx
-spec:
-  errors:
-    status:
-      - "500-599"
-    query: /50x.html #pan-svc
-    service:
-      name: proxy-svc
-      port: sp
-
----
-# 修改url
-apiVersion: traefik.containo.us/v1alpha1
-kind: Middleware
-metadata:
-  name: url404
-spec:
-  replacePath:
-    path: /404.html
-
----
-# 响应头
-apiVersion: traefik.containo.us/v1alpha1
+--- #响应头
+apiVersion: traefik.io/v1alpha1
 kind: Middleware
 metadata:
   name: add-header
@@ -143,397 +87,445 @@ spec:
     stsPreload: true #启用HSTS;要求浏览器总是http跳转到https
     customResponseHeaders:
       Wall: "Hi! Welcome!"
-      Strict-Transport-Security: 'max-age=31536000' #启用HSTS;要求浏览器总是通过 https
-      Alt-Svc: 'quic=":443"; h3-27=":443";h3-25=":443"; h3-T050=":443"; h3-Q050=":443";h3-Q049=":443";h3-Q048=":443"; h3-Q046=":443"; h3-Q043=":443"' #备选服务
-
----
-# 并行
-apiVersion: traefik.containo.us/v1alpha1
+      Strict-Transport-Security: "max-age=31536000; includeSubDomains; preload" #启用HSTS;要求浏览器总是通过 https
+      X-XSS-Protection: "0" #禁用旧版XSS过滤器（可能引入漏洞）
+      Alt-Svc: 'h3=":443"; h3-29=":443"' #备选服务
+      X-Content-Type-Options: "nosniff" #禁止服务器自动解析资源类型
+      Content-Security-Policy: "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; font-src 'self'; connect-src 'self'; frame-src 'none'" #关键CSP策略
+      Referrer-Policy: "no-referrer-when-downgrade" # 控制 Referer 头泄露
+--- #错误页
+apiVersion: traefik.io/v1alpha1
 kind: Middleware
 metadata:
-  name: worker-processes
+  name: error-4xx
 spec:
-  inFlightReq:
+  errors:
+    status:
+      - "402-499"
+    query: /404.html
+    service:
+      name: pan-svc
+      port: 80
+--- #错误页
+apiVersion: traefik.io/v1alpha1
+kind: Middleware
+metadata:
+  name: error-5xx
+spec:
+  errors:
+    status:
+      - "500-599"
+    query: /50x.html
+    service:
+      name: pan-svc
+      port: 80
+--- #TCP中间件
+apiVersion: traefik.io/v1alpha1
+kind: MiddlewareTCP
+metadata:
+  name: inflightconn
+spec:
+  inFlightConn:
     amount: 10
----
-# 限流
-apiVersion: traefik.containo.us/v1alpha1
+--- #密码授权验证
+apiVersion: traefik.io/v1alpha1
 kind: Middleware
 metadata:
-  name: limit-req
+  name: auth
 spec:
-  rateLimit: # 1s 内接收的请求数的平均值不大于500个，高峰最大1000个请求
-    burst: 200
-    average: 100
----
-# 熔断
-apiVersion: traefik.containo.us/v1alpha1
-kind: Middleware
-metadata:
-  name: circuit-breaker
-spec:
-  circuitBreaker:
-    expression: LatencyAtQuantileMS(70.0) > 2000 || NetworkErrorRatio() > 0.5 || ResponseCodeRatio(500, 600, 0, 600) > 0.5 #达70.0%(一定得有小数点)流量的网络延迟超2秒, 或者网络错误率达50%, 或者50%流量返回5XX时,出发熔断
----
-#流量复制
-apiVersion: traefik.containo.us/v1alpha1
-kind: TraefikService
-metadata:
-  name: mirror
-spec:
-  mirroring:
-    name: proxy-svc
-    port: sp
-    #实现"流量复制"
-    # mirrors:
-    #   - name: proxy-svc
-    #     port: sp
-    #     kind: Service
-    #     percent: 50 #流向mirroring的流量的其中percent%复制到mirrors
+  basicAuth:
+    secret: traefik-dashboard
+    removeHeader: true #删除验证头
+#================end
 
 ---
-#金丝雀发布(灰度)
-#需要后端服务设定cookie从而指定是否进灰度
-apiVersion: traefik.containo.us/v1alpha1
-kind: TraefikService
+apiVersion: traefik.io/v1alpha1
+kind: TLSOption
 metadata:
-  name: wrr
+  name: tls-conf
 spec:
-  weighted:
-    # sticky:
-    #   cookie:
-    #     name: c0 #如果cookie带c0=[namespace名]-[service名]-[port名], 则去到指定service;从而实现灰度
-    services:
-      - name: proxy-svc
-        port: sp
-        weight: 1
-        sticky:
-          cookie:
-            name: c-pod #同上,此处去到指定pod
+  minVersion: VersionTLS12 # 最低TLS版本
+  cipherSuites: # 允许的加密套件
+    - TLS_AES_256_GCM_SHA384 #TLS1.3
+    - TLS_CHACHA20_POLY1305_SHA256 #TLS1.3
+    - TLS_AES_128_GCM_SHA256 #TLS1.3
+    - ECDHE-ECDSA-AES256-GCM-SHA384 #TLS1.2
+    - ECDHE-RSA-AES256-GCM-SHA384 #TLS1.2
+    - ECDHE-ECDSA-CHACHA20-POLY1305 #TLS1.2
+    - ECDHE-RSA-CHACHA20-POLY1305 #TLS1.2
+    - ECDHE-ECDSA-AES128-GCM-SHA256 #TLS1.2
+    - ECDHE-RSA-AES128-GCM-SHA256 #TLS1.2
+  curvePreferences:
+    - X25519
+    - CurveP256
+    - CurveP384
+  sniStrict: true # 是否强制SNI匹配
+  preferServerCipherSuites: true # 优先使用服务器端加密套件
 ---
-#代理ssh不需要配置"tls"
-apiVersion: traefik.containo.us/v1alpha1
-kind: IngressRouteTCP
+apiVersion: gateway.networking.k8s.io/v1
+kind: GatewayClass
 metadata:
-  name: ssh
+  name: traefik-gc
 spec:
-  entryPoints:
-    - ssh
-  routes:
-    - match: HostSNI(`*`)
-      services:
-        - name: frp-svc
-          port: sp-ssh
-
+  controllerName: traefik.io/gateway-controller
 ---
-#四层网络SNI分流(只能用于Tls)
-apiVersion: traefik.containo.us/v1alpha1
-kind: IngressRouteTCP
+apiVersion: gateway.networking.k8s.io/v1
+kind: Gateway
 metadata:
-  name: sni
+  name: traefik-gtw
 spec:
-  entryPoints:
-    - websecure
-  tls:
-    passthrough: true
-  routes:
-    - match: HostSNI(`r.404502.xyz`) || HostSNI(`r.twbhub.com`)
-      services:
-        - name: xray-svc
-          port: sp
-    - match: HostSNI(`x.404502.xyz`) || HostSNI(`x.twbhub.com`)
-      services:
-        - name: xray-svc
-          port: sp-xtls
-    - match: HostSNI(`xr.404502.xyz`) || HostSNI(`xr.twbhub.com`)
-      services:
-        - name: xray-svc
-          port: sp-ws
-    - match: HostSNI(`frp.twbhub.top`) || HostSNI(`frp.cc.cc`)
-      services:
-        - name: frp-svc
-          port: sp
+  gatewayClassName: traefik-gc
+  # addresses:
+  #   - value: "xxx.xxx.xxx.xxx" #绑定ip或网卡
+  listeners:
+    - name: ssh
+      port: 2222
+      protocol: TCP
+      allowedRoutes:
+        kinds:
+          - kind: TCPRoute
+    - name: sni-frp
+      protocol: TLS
+      port: 443
+      hostname: "frp.twbhub.top"
+      tls:
+        mode: Passthrough #透传TLS,用于四层网络SNI分流
+    - name: sni-xray-r
+      protocol: TLS
+      port: 443
+      hostname: "r.404502.xyz"
+      tls:
+        mode: Passthrough
+    - name: sni-xray-x
+      protocol: TLS
+      port: 443
+      hostname: "x.404502.xyz"
+      tls:
+        mode: Passthrough
+    - name: sni-xray-xr
+      protocol: TLS
+      port: 443
+      hostname: "xr.404502.xyz"
+      tls:
+        mode: Passthrough
+    - name: web
+      protocol: HTTP
+      port: 80
+    - name: websecure-main
+      protocol: HTTPS
+      port: 443
+      hostname: twbhub.top
+      tls:
+        mode: Terminate
+        certificateRefs:
+          - name: tls-secret #也可用traefik-TLSStore等方式配置
+    - name: websecure
+      protocol: HTTPS
+      port: 443
+      hostname: "*.twbhub.top"
+      tls:
+        mode: Terminate
+        options:
+          kind: TLSOption
+          name: tls-conf
+          group: traefik.io
+        certificateRefs:
+          - name: tls-secret
+    - name: xray-main
+      protocol: HTTPS
+      port: 443
+      hostname: 404502.xyz
+      tls:
+        mode: Terminate
+        options:
+          kind: TLSOption
+          name: tls-conf
+          group: traefik.io
+        certificateRefs:
+          - name: xray-secret
+    - name: xray-www
+      protocol: HTTPS
+      port: 443
+      hostname: www.404502.xyz
+      tls:
+        mode: Terminate
+        options:
+          kind: TLSOption
+          name: tls-conf
+          group: traefik.io
+        certificateRefs:
+          - name: xray-secret
 
----
-apiVersion: traefik.containo.us/v1alpha1
-kind: IngressRoute #CRD(IngressRoute)和Ingress和Gateway API三种方式创建路由
+--- #SSH流量
+apiVersion: gateway.networking.k8s.io/v1alpha2
+kind: TCPRoute
 metadata:
-  name: https
-spec:
-  entryPoints:
-    - websecure #如果使用了websecure而没有配置tls, 只要没设置"entrypoints.websecure.http.tls=true", 访问http://xx.xx:[websecure]也是能访问的
-  tls:
-    secretName: tls-secret
-  routes:
-    # - match: Host(`admin.twbhub.top`)
-    #   kind: Rule
-    #   middlewares:
-    #     - name: websecure
-    #     - name: traefik-dashboard-auth
-    #   services:
-    #     - name: api@internal
-    #       kind: TraefikService
-    - match: Host(`www.twbhub.top`) || Host(`clash.twbhub.top`) || Host(`go.cc.cc`) #订阅
-      middlewares:
-        - name: websecure
-      kind: Rule
-      services:
-        - name: wrr
-          kind: TraefikService
-    - match: Host(`ai.twbhub.top`)
-      middlewares:
-        - name: websecure
-      kind: Rule
-      services:
-        - name: ai-svc
-          port: sp
-    - match: Host(`dating.twbhub.top`) #小程序
-      middlewares:
-        - name: websecure
-      kind: Rule
-      services:
-        - name: dating-svc
-          port: sp
-    - match: Host(`ql.twbhub.top`) || Host(`ql.cc.cc`)
-      middlewares:
-        - name: websecure
-      kind: Rule
-      services:
-        - name: ql-svc
-          port: sp
-    - match: Host(`pan.twbhub.top`) || Host(`pan.cc.cc`)
-      kind: Rule
-      services:
-        - name: pan-svc
-          port: sp
-    - match: Path(`/404.html`) || Path(`/40x.html`) || Path(`/50x.html`)
-      kind: Rule
-      services:
-        - name: proxy-svc
-          port: sp
-    - match: PathPrefix(`/`) #匹配所有路径
-      middlewares:
-        - name: url404 #因为traefik找不到路由的默认页面简陋,重定向到指定页面
-      priority: 1  #设定路由优先级;如有些"match"是默认优先级较低的模糊匹配
-      kind: Rule
-      services:
-        - name: proxy-svc
-          port: sp
-
----
-apiVersion: traefik.containo.us/v1alpha1
-kind: IngressRoute
-metadata:
-  name: https2
-spec:
-  entryPoints:
-    - websecure
-  tls:
-    secretName: xray-secret
-  routes:
-    - match: Host(`404502.xyz`) || Host(`www.404502.xyz`) || Host(`twbhub.com`) || Host(`www.twbhub.com`)
-      middlewares:
-        # - name: redirectregex
-        - name: redirect-non-www
-      kind: Rule
-      services:
-        - name: proxy-svc
-          port: sp
-    - match: Path(`/404.html`) || Path(`/40x.html`) || Path(`/50x.html`)
-      kind: Rule
-      services:
-        - name: proxy-svc
-          port: sp
-    - match: PathPrefix(`/`)
-      middlewares:
-        - name: url404
-      priority: 1
-      kind: Rule
-      services:
-        - name: proxy-svc
-          port: sp
-
-#IngressRoute=========================end
-
-#Gateway API============================================================begin
-
-# ---
-# apiVersion: gateway.networking.k8s.io/v1alpha2
-# kind: GatewayClass
-# metadata:
-#   name: my-gc
-# spec:
-#   controllerName: traefik.io/gateway-controller
-
-# ---
-# apiVersion: gateway.networking.k8s.io/v1alpha2
-# kind: Gateway
-# metadata:
-#   name: my-gtw
-# spec:
-#   gatewayClassName: my-gc
-#   listeners:
-#     - name: tls
-#       protocol: TLS
-#       port: 8443
-#       tls:
-#         mode: Passthrough #让服务来做tls验证,即四层网络SNI分流
-#       # hostname: "*.cc.cc"
-#       allowedRoutes:
-#         kinds:
-#           - kind: TLSRoute
-#         namespaces:
-#           from: All
-#     - name: http
-#       protocol: HTTP
-#       port: 8000 #使用traefik设置的端口:entrypoints.web.address
-#       allowedRoutes:
-#         kinds:
-#           - kind: HTTPRoute
-#         namespaces:
-#           from: All
-#     # - name: https
-#     #   protocol: HTTPS
-#     #   port: 8442
-#     #   tls:
-#     #     certificateRefs:
-#     #       - kind: Secret
-#     #         name: tls-secret
-#     #   allowedRoutes:
-#     #     kinds:
-#     #       - kind: HTTPRoute
-#     #     namespaces:
-#     #       from: All
-
-# ---
-# #四层网络SNI分流
-# apiVersion: gateway.networking.k8s.io/v1alpha2
-# kind: TLSRoute
-# metadata:
-#   name: sni
-# spec:
-#   parentRefs:
-#     - name: my-gtw
-#       # sectionName: tls
-#   hostnames:
-#     - go.cc.cc
-#   rules:
-#     - backendRefs:
-#       - name: nginx-svc
-#         port: 8081
-#         weight: 1
-# ---
-# apiVersion: gateway.networking.k8s.io/v1alpha2
-# kind: HTTPRoute
-# metadata:
-#   name: http-test
-# spec:
-#   parentRefs:
-#     - name: my-gtw
-#       # sectionName: http
-#   hostnames:
-#     - go.cc.cc
-#   rules:
-#     - matches:
-#       - path:
-#           type: PathPrefix
-#           value: /
-#       backendRefs:
-#       - name: whoami
-#         port: 80
-#         weight: 1
-
-#Gateway API====================================================================end
-
-#traefik-role============================================================begin
-
----
-#k3s自动配置的权限有缺少, 故重新配置
-#由于本配置需要滞后执行, 故跟route一并滞后
-apiVersion: rbac.authorization.k8s.io/v1
-kind: ClusterRole
-metadata:
-  name: traefik-kube-system
+  name: frp-ssh
   annotations:
-    meta.helm.sh/release-name: traefik
-    meta.helm.sh/release-namespace: kube-system
-  labels:
-    app.kubernetes.io/instance: traefik-kube-system
-    app.kubernetes.io/managed-by: Helm
-    app.kubernetes.io/name: traefik
-rules:
-  - apiGroups:
-      - ""
-    resources:
-      - namespaces
-    verbs:
-      - list
-      - watch
-  - apiGroups:
-      - ""
-    resources:
-      - services
-      - endpoints
-      - secrets
-    verbs:
-      - get
-      - list
-      - watch
-  - apiGroups:
-      - gateway.networking.k8s.io
-    resources:
-      - gatewayclasses
-      - gateways
-      - httproutes
-      - tcproutes
-      - tlsroutes
-    verbs:
-      - get
-      - list
-      - watch
-  - apiGroups:
-      - gateway.networking.k8s.io
-    resources:
-      - gatewayclasses/status
-      - gateways/status
-      - httproutes/status
-      - tcproutes/status
-      - tlsroutes/status
-    verbs:
-      - update
-  - apiGroups:
-      - extensions
-      - networking.k8s.io
-    resources:
-      - ingresses
-      - ingressclasses
-    verbs:
-      - get
-      - list
-      - watch
-  - apiGroups:
-      - extensions
-      - networking.k8s.io
-    resources:
-      - ingresses/status
-    verbs:
-      - update
-  - apiGroups:
-      - traefik.io
-      - traefik.containo.us
-    resources:
-      - ingressroutes
-      - ingressroutetcps
-      - ingressrouteudps
-      - middlewares
-      - middlewaretcps
-      - tlsoptions
-      - tlsstores
-      - traefikservices
-      - serverstransports
-      - serverstransporttcps
-    verbs:
-      - get
-      - list
-      - watch
-#traefik-role============================================================end
+    traefik.ingress.kubernetes.io/router.tcp.middlewares: inflightconn@kubernetescrd #因为TCPRoute无法使用traefik中间件,使用在此配置
+spec:
+  parentRefs:
+    - name: traefik-gtw
+      sectionName: ssh
+  rules:
+    - backendRefs:
+        - name: frp-svc
+          port: 22
+--- #frp-http流量
+apiVersion: gateway.networking.k8s.io/v1alpha2
+kind: TLSRoute
+metadata:
+  name: frp-http
+spec:
+  parentRefs:
+    - name: traefik-gtw
+      sectionName: sni-frp
+  hostnames:
+    - frp.twbhub.top
+  rules:
+    - backendRefs:
+        - name: frp-svc
+          port: 443
+--- #xray流量r
+apiVersion: gateway.networking.k8s.io/v1alpha2
+kind: TLSRoute
+metadata:
+  name: xray-r
+spec:
+  parentRefs:
+    - name: traefik-gtw
+      sectionName: sni-xray-r
+  hostnames:
+    - r.404502.xyz
+  rules:
+    - backendRefs:
+        - name: xray-svc
+          port: 443
+--- #xray流量x
+apiVersion: gateway.networking.k8s.io/v1alpha2
+kind: TLSRoute
+metadata:
+  name: xray-x
+spec:
+  parentRefs:
+    - name: traefik-gtw
+      sectionName: sni-xray-x
+  hostnames:
+    - x.404502.xyz
+  rules:
+    - backendRefs:
+        - name: xray-svc
+          port: 80
+--- #xray流量xr
+apiVersion: gateway.networking.k8s.io/v1alpha2
+kind: TLSRoute
+metadata:
+  name: xray-xr
+spec:
+  parentRefs:
+    - name: traefik-gtw
+      sectionName: sni-xray-xr
+  hostnames:
+    - xr.404502.xyz
+  rules:
+    - backendRefs:
+        - name: xray-svc
+          port: 8080
+--- #xray-主域名
+apiVersion: gateway.networking.k8s.io/v1
+kind: HTTPRoute
+metadata:
+  name: xray-main
+spec:
+  parentRefs:
+    - name: traefik-gtw
+      sectionName: xray-main
+  hostnames:
+    - 404502.xyz
+  rules:
+    - filters:
+        - type: ExtensionRef
+          extensionRef:
+            group: traefik.io
+            kind: Middleware
+            name: http
+        - type: RequestRedirect
+          requestRedirect:
+            hostname: xr.404502.xyz #回落假页面
+            statusCode: 301
+      backendRefs:
+--- #xray-www
+apiVersion: gateway.networking.k8s.io/v1
+kind: HTTPRoute
+metadata:
+  name: xray-main-www
+spec:
+  parentRefs:
+    - name: traefik-gtw
+      sectionName: xray-www
+  hostnames:
+    - www.404502.xyz
+  rules:
+    - filters:
+        - type: ExtensionRef
+          extensionRef:
+            group: traefik.io
+            kind: Middleware
+            name: http
+        - type: RequestRedirect
+          requestRedirect:
+            hostname: xr.404502.xyz
+            statusCode: 301
+      backendRefs:
+--- #traefik面板
+apiVersion: gateway.networking.k8s.io/v1
+kind: HTTPRoute
+metadata:
+  name: dashboard
+spec:
+  parentRefs:
+    - name: traefik-gtw
+      sectionName: websecure
+    - name: traefik-gtw
+      sectionName: web
+  hostnames:
+    - admin.twbhub.top
+    - admin.cc.cc
+  rules:
+    - filters:
+        - type: ExtensionRef #能设置各种功能,如重定向、流量复制等,不一定要用Traefik中间件
+          extensionRef:
+            group: traefik.io
+            kind: Middleware
+            name: http
+        - type: ExtensionRef
+          extensionRef:
+            group: traefik.io
+            kind: Middleware
+            name: auth
+      matches:
+        - path:
+            type: PathPrefix
+            value: /
+      backendRefs:
+        - name: api@internal
+          kind: TraefikService
+          weight: 100 #权重设置,可用于灰度发布(金丝雀),一般设定cookie/HTTP头 从而判断是否进灰度
+      timeouts:
+        request: 60s #总响应超时
+        backendRequest: 30s #后端响应超时
+--- #网盘
+apiVersion: gateway.networking.k8s.io/v1
+kind: HTTPRoute
+metadata:
+  name: pan
+spec:
+  parentRefs:
+    - name: traefik-gtw
+      sectionName: websecure
+    - name: traefik-gtw
+      sectionName: web
+  hostnames:
+    - pan.twbhub.top
+    - pan.cc.cc
+  rules:
+    - filters:
+        - type: ExtensionRef
+          extensionRef:
+            group: traefik.io
+            kind: Middleware
+            name: http
+      backendRefs:
+        - name: pan-svc
+          port: 80
+--- #订阅
+apiVersion: gateway.networking.k8s.io/v1
+kind: HTTPRoute
+metadata:
+  name: proxy
+spec:
+  parentRefs:
+    - name: traefik-gtw
+      sectionName: websecure
+  hostnames:
+    - www.twbhub.top
+    - clash.twbhub.top
+  rules:
+    - filters:
+        - type: ExtensionRef
+          extensionRef:
+            group: traefik.io
+            kind: Middleware
+            name: http
+      matches:
+        - method: GET #限制请求方法
+        - method: POST
+      backendRefs:
+        - name: proxy-svc
+          port: 80
+--- #AI
+apiVersion: gateway.networking.k8s.io/v1
+kind: HTTPRoute
+metadata:
+  name: ai
+spec:
+  parentRefs:
+    - name: traefik-gtw
+      sectionName: websecure
+  hostnames:
+    - ai.twbhub.top
+  rules:
+    - filters:
+        - type: ExtensionRef
+          extensionRef:
+            group: traefik.io
+            kind: Middleware
+            name: common
+      backendRefs:
+        - name: ai-svc
+          port: 80
+--- #小程序
+apiVersion: gateway.networking.k8s.io/v1
+kind: HTTPRoute
+metadata:
+  name: dating
+spec:
+  parentRefs:
+    - name: traefik-gtw
+      sectionName: websecure
+  hostnames:
+    - dating.twbhub.top
+  rules:
+    - filters:
+        - type: ExtensionRef
+          extensionRef:
+            group: traefik.io
+            kind: Middleware
+            name: http
+      matches:
+        - method: GET
+        - method: POST
+      backendRefs:
+        - name: dating-svc
+          port: 80
+--- #青龙面板
+apiVersion: gateway.networking.k8s.io/v1
+kind: HTTPRoute
+metadata:
+  name: ql
+spec:
+  parentRefs:
+    - name: traefik-gtw
+      sectionName: websecure
+  hostnames:
+    - ql.twbhub.top
+  rules:
+    - filters:
+        - type: ExtensionRef
+          extensionRef:
+            group: traefik.io
+            kind: Middleware
+            name: http
+      backendRefs:
+        - name: ql-svc
+          port: 80

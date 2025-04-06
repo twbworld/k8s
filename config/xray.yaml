@@ -1,4 +1,3 @@
-
 ---
 apiVersion: apps/v1
 kind: Deployment
@@ -17,8 +16,6 @@ spec:
       name: xray-deploy
       labels:
         app: xray-container
-      annotations:
-        changeRollingUpdate: ${K8S_XRAY}
     spec:
       restartPolicy: Always
       priorityClassName: system-cluster-critical
@@ -35,7 +32,7 @@ spec:
             claimName: log
       initContainers:
         - name: wait-pan
-          image: alpine:latest
+          image: alpine:3.21
           imagePullPolicy: IfNotPresent
           command:
             - sh
@@ -72,6 +69,7 @@ spec:
                 configMapKeyRef:
                   name: global
                   key: timezone
+                  optional: true
             - name: UUID
               valueFrom:
                 fieldRef:
@@ -117,7 +115,6 @@ spec:
     - name: sp-ws
       port: 8080
 
-
 ---
 apiVersion: autoscaling/v2
 kind: HorizontalPodAutoscaler
@@ -128,12 +125,12 @@ status:
   currentReplicas: 1
   desiredReplicas: 1
   currentMetrics:
-  - type: Resource
-    resource:
-      name: cpu
-      current:
-        averageUtilization: 0
-        averageValue: 0
+    - type: Resource
+      resource:
+        name: cpu
+        current:
+          averageUtilization: 0
+          averageValue: 0
 spec:
   scaleTargetRef:
     apiVersion: apps/v1
@@ -142,26 +139,26 @@ spec:
   minReplicas: 1
   maxReplicas: 4
   metrics:
-  - type: Resource
-    resource:
-      name: cpu
-      target:
-        type: Utilization
-        averageUtilization: 80
+    - type: Resource
+      resource:
+        name: cpu
+        target:
+          type: Utilization
+          averageUtilization: 80
   behavior:
     scaleUp:
       stabilizationWindowSeconds: 0
       policies:
-      - type: Percent
-        value: 100
-        periodSeconds: 15
-      - type: Pods
-        value: 2
-        periodSeconds: 15
+        - type: Percent
+          value: 100
+          periodSeconds: 15
+        - type: Pods
+          value: 2
+          periodSeconds: 15
       selectPolicy: Max
     scaleDown:
       stabilizationWindowSeconds: 300
       policies:
-      - type: Percent
-        value: 100
-        periodSeconds: 15
+        - type: Percent
+          value: 100
+          periodSeconds: 15

@@ -1,6 +1,6 @@
 ---
-#此文件建议放到"/var/lib/rancher/k3s/server/manifests/"下
-#k3s会自动安装traefik(需禁止则添加参数--disable=traefik): manifests/下生成traefik.yaml, k3s会执行该目录(包括子目录)下的所有yaml
+#apply后会延时生效,可重启Traefik pod(kubectl rollout restart deployment traefik -n kube-system)
+#k3s启动后安装traefik(参数--disable=traefik禁止安装),并执行"/var/lib/rancher/k3s/server/manifests/"下所有yaml
 
 apiVersion: helm.cattle.io/v1
 kind: HelmChartConfig
@@ -9,9 +9,9 @@ metadata:
   namespace: kube-system
 spec:
   valuesContent: |-
-    image:
-      repository: "rancher/mirrored-library-traefik"
-      tag: "2.10.5" #2.9.10
+    # image:
+    #   repository: "rancher/mirrored-library-traefik"
+    #   tag: "3.3.5"
     service:
       ipFamilyPolicy: "PreferDualStack"
       spec:
@@ -19,61 +19,63 @@ spec:
     env:
       - name: TZ
         value: Asia/Shanghai
+    api:
+      dashboard: false
+      insecure: false #不安全模式,允许HTTP方式访问API
+      disabledashboardad: true
     ports:
-      test:
-        port: 8080 #可在IngressRoute下的entryPoints使用;traefik会自动生成"--entrypoints.test.address"启动参数
-        expose: false #将端口真正暴露到集群外;一旦设置,可分别在endpoint/service查到port/exposedPort
-        exposedPort: 8080 #可忽略
+      websecure:
+        port: 443 #traefik会自动生成"--entryPoints.websecure.address"
+        tls:
+          enabled: true #true:如果配置了tls证书则优先,否则会使用traefik默认的证书;(这websecure指8443, 但入口依然是443);false:禁用tls
+      web:
+        port: 80
       ssh:
         port: 2222
-        expose: true
+        # exposedPort: 2222 #可略
+        expose:
+          default: false #将端口真正暴露到集群外;一旦设置,可分别在endpoint/service查到port/exposedPort
     additionalArguments: #https://doc.traefik.io/traefik/reference/static-configuration/cli/
-      - --api.insecure=false #不安全模式,允许HTTP方式访问 API(即dashboard,默认"--entrypoints.traefik.address=:8080",并暴露, 建议使用port-forward的方式)
-      - --api.dashboard=false
-      # - --experimental.kubernetesgateway #允许使用还处于实验的Gateway API; 需要配置Gateway API CRDs,否则报错
-      - --providers.kubernetesgateway #启用Gateway API
-      - --providers.kubernetesingress
-      - --providers.kubernetesIngress.allowExternalNameServices #是否允许使用ExternalName的服务
       - --providers.kubernetescrd
       - --providers.kubernetescrd.allowExternalNameServices
       - --providers.kubernetescrd.allowCrossNamespace #是否允许跨命名空间
-      - --entrypoints.websecure.http2.maxConcurrentStreams=250
-      - --entrypoints.websecure.http.tls=true #是否使用tls证书验证websecure端口流量;true:如果Ingress处配置了tls证书则优先,否则会使用traefik默认的证书;(这websecure指8443, 但入口依然是443)
-      - --entrypoints.websecure.forwardedHeaders.insecure #获取真实ip
-      - --entrypoints.web.forwardedHeaders.insecure  #获取真实ip
-      - --entrypoints.web.http.redirections.entrypoint.to=:443
-      - --entrypoints.web.http.redirections.entryPoint.scheme=https
-      - --entrypoints.web.http.redirections.entrypoint.permanent #永久重定向
-    #从IP链排除的ip(对应"listen 127.0.0.1:443"的配置; 如不排除ip(如cdn平台的ip),则proxy_add_x_forwarded_for和proxy_protocol_addr就会带上,导致真实ip被隐藏);
+      - --providers.kubernetesingress
+      - --providers.kubernetesIngress.allowExternalNameServices
+      - --providers.kubernetesgateway #启用Gateway API
+      - --providers.kubernetesgateway.experimentalchannel=true #Gateway API试验性功能
+      - --entryPoints.websecure.forwardedHeaders.insecure #为获取真实ip
+      - --entryPoints.web.forwardedHeaders.insecure  #获取真实ip
+      - --entryPoints.web.http.redirections.entrypoint.to=websecure
+      - --entryPoints.web.http.redirections.entryPoint.scheme=https
+      - --entryPoints.web.http.redirections.entrypoint.permanent=true #?308:307 重定向
+    #从IP链排除的ip(proxy_add_x_forwarded_for和proxy_protocol_addr就会带上如cdn平台的ip,导致真实ip被隐藏);
     #https://www.cloudflare.com/ips/
+    #https://raw.githubusercontent.com/twbworld/docker/main/conf/nginx/conf.d/common/ip.conf
     proxyProtocol:
       enabled: true
       trustedIPs:
+        - 142.171.223.53
         - 134.175.168.189
         - 121.4.195.125
         - 127.0.0.0/24
         - 192.168.0.0/16
         - 172.1.0.0/16
-        - 10.40.0.0/16
-        - 10.41.0.0/16
-        - 10.42.0.0/16
-        - 10.43.0.0/16
-        - 10.44.0.0/16
+        - 10.0.0.0/16
+        - 173.245.48.0/20
         - 103.21.244.0/22
         - 103.22.200.0/22
         - 103.31.4.0/22
-        - 104.16.0.0/13
-        - 104.24.0.0/14
-        - 108.162.192.0/18
-        - 131.0.72.0/22
         - 141.101.64.0/18
-        - 162.158.0.0/15
-        - 172.64.0.0/13
-        - 173.245.48.0/20
-        - 188.114.96.0/20
+        - 108.162.192.0/18
         - 190.93.240.0/20
+        - 188.114.96.0/20
         - 197.234.240.0/22
         - 198.41.128.0/17
+        - 162.158.0.0/15
+        - 104.16.0.0/13
+        - 104.24.0.0/14
+        - 172.64.0.0/13
+        - 131.0.72.0/22
         - 2400:cb00::/32
         - 2606:4700::/32
         - 2803:f800::/32
@@ -84,31 +86,28 @@ spec:
     forwardedHeaders:
       enabled: true
       trustedIPs:
+        - 142.171.223.53
         - 134.175.168.189
         - 121.4.195.125
         - 127.0.0.0/24
         - 192.168.0.0/16
         - 172.1.0.0/16
-        - 10.40.0.0/16
-        - 10.41.0.0/16
-        - 10.42.0.0/16
-        - 10.43.0.0/16
-        - 10.44.0.0/16
+        - 10.0.0.0/16
+        - 173.245.48.0/20
         - 103.21.244.0/22
         - 103.22.200.0/22
         - 103.31.4.0/22
-        - 104.16.0.0/13
-        - 104.24.0.0/14
-        - 108.162.192.0/18
-        - 131.0.72.0/22
         - 141.101.64.0/18
-        - 162.158.0.0/15
-        - 172.64.0.0/13
-        - 173.245.48.0/20
-        - 188.114.96.0/20
+        - 108.162.192.0/18
         - 190.93.240.0/20
+        - 188.114.96.0/20
         - 197.234.240.0/22
         - 198.41.128.0/17
+        - 162.158.0.0/15
+        - 104.16.0.0/13
+        - 104.24.0.0/14
+        - 172.64.0.0/13
+        - 131.0.72.0/22
         - 2400:cb00::/32
         - 2606:4700::/32
         - 2803:f800::/32

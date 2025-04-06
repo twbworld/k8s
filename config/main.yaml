@@ -24,7 +24,7 @@ apiVersion: scheduling.k8s.io/v1
 kind: PriorityClass
 metadata:
   name: default-pc
-value: 1000000000
+value: 1000
 globalDefault: true
 description: "默认优先级类"
 
@@ -33,7 +33,7 @@ apiVersion: scheduling.k8s.io/v1
 kind: PriorityClass
 metadata:
   name: low-pc
-value: 500000000
+value: 500
 globalDefault: false
 description: "低优先级类"
 
@@ -55,31 +55,136 @@ description: "低优先级类"
 #         limits.memory: 1Gi
 #         requests.nvidia.com/gpu: 2
 
-# ---
-# apiVersion: apps/v1
-# kind: Deployment
-# metadata:
-#   name: whoami-deploy
-# spec:
-#   selector:
-#     matchLabels:
-#       app: whoami-container
-#   template:
-#     metadata:
-#       labels:
-#         app: whoami-container
-#     spec:
-#       containers:
-#         - name: whoami-container
-#           image: traefik/whoami
-# ---
-# apiVersion: v1
-# kind: Service
-# metadata:
-#   name: whoami-svc
-# spec:
-#   selector:
-#     app: whoami-container
-#   ports:
-#     - name: sp
-#       port: 80
+#Role============================================================begin
+
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: traefik-role
+  annotations:
+    meta.helm.sh/release-name: traefik
+    meta.helm.sh/release-namespace: kube-system
+  labels:
+    app.kubernetes.io/instance: traefik-kube-system
+    app.kubernetes.io/managed-by: Helm
+    app.kubernetes.io/name: traefik
+rules:
+  - apiGroups:
+      - ""
+    resources:
+      - services
+      - endpoints
+      - secrets
+      - nodes
+      - configmaps
+    verbs:
+      - get
+      - list
+      - watch
+  - apiGroups:
+      - ""
+    resources:
+      - namespaces
+    verbs:
+      - list
+      - watch
+  - apiGroups:
+      - ""
+    resources:
+      - events
+    verbs:
+      - create
+      - patch
+  - apiGroups:
+      - gateway.networking.k8s.io
+    resources:
+      - gatewayclasses
+      - gateways
+      - httproutes
+      - tcproutes
+      - tlsroutes
+      - udproutes
+      - grpcroutes
+      - referencegrants
+      - backendtlspolicies
+    verbs:
+      - get
+      - list
+      - watch
+      - update
+      - patch
+      - create
+      - delete
+  - apiGroups:
+      - gateway.networking.k8s.io
+    resources:
+      - gatewayclasses/status
+      - gateways/status
+      - httproutes/status
+      - tcproutes/status
+      - tlsroutes/status
+      - grpcroutes/status
+      - udproutes/status
+      - referencegrants/status
+      - backendtlspolicies/status
+    verbs:
+      - update
+      - patch
+  - apiGroups:
+      - extensions
+      - networking.k8s.io
+    resources:
+      - ingresses
+      - ingressclasses
+    verbs:
+      - get
+      - list
+      - watch
+  - apiGroups:
+      - extensions
+      - networking.k8s.io
+    resources:
+      - ingresses/status
+    verbs:
+      - update
+  - apiGroups:
+      - traefik.io
+      - traefik.containo.us
+    resources:
+      - ingressroutes
+      - ingressroutetcps
+      - ingressrouteudps
+      - middlewares
+      - middlewaretcps
+      - tlsoptions
+      - tlsstores
+      - traefikservices
+      - serverstransports
+      - serverstransporttcps
+    verbs:
+      - get
+      - list
+      - watch
+  - apiGroups:
+      - discovery.k8s.io
+    resources:
+      - endpointslices
+    verbs:
+      - get
+      - list
+      - watch
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: gateway-controller
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: traefik-role
+subjects:
+  - kind: ServiceAccount
+    name: traefik
+    namespace: kube-system
+#Role============================================================end

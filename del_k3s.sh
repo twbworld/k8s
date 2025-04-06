@@ -1,4 +1,4 @@
-# 执行这个脚本前先运行: k3s-killall.sh &&k3s-uninstall.sh
+# 执行这个脚本前先运行: k3s-killall.sh && k3s-uninstall.sh
 ###
  # @Date         : 2023-07-22T16:07:40+0800
  # @FilePath     : \k8s\del_k3s.sh

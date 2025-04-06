@@ -8,6 +8,15 @@ mirrors:
       - https://docker.m.daocloud.io
       - https://mirrors.sjtug.sjtu.edu.cn
       - https://mirrors.sjtug.sjtu.edu.cn/docs/docker-registry
+      - https://registry.docker-cn.com
+  ghcr.io:
+    endpoint:
+      - https://ghcr.nju.edu.cn
+      - https://ghcr.m.daocloud.io
   registry.k8s.io:
     endpoint:
       - https://k8s.m.daocloud.io
+      - https://registry.k8s.io
+      - https://k8s.gcr.io
+      - https://registry.cn-hangzhou.aliyuncs.com/google_containers
+      - https://gcr.azk8s.cn/google_containers

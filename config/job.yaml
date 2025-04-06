@@ -18,7 +18,7 @@ spec:
                 claimName: log
           containers:
             - name: log-clear
-              image: busybox:latest
+              image: busybox:1.37
               imagePullPolicy: IfNotPresent
               env:
                 - name: TZ
@@ -26,6 +26,7 @@ spec:
                     configMapKeyRef:
                       name: global
                       key: timezone
+                      optional: true
               volumeMounts:
                 - name: log
                   mountPath: /var/www/logs/
@@ -42,13 +43,20 @@ spec:
                     exit 1
                   fi
                   for f in $(find $path -name "*.log" -type f -size +$size); do
-                    r=$(cat $f |wc -l)
+                    r=$(wc -l < "$f")
                     d=$(expr $r - $row)
                     if [ $r -gt $row ]; then
                         sed -i "1,${d}d" $f
-                        echo $(echo '[' && date "+%Y-%m-%d %H:%M:%S" && echo ']') >> $f
-                        echo $f
+                        echo "$(date "+%Y-%m-%d %H:%M:%S") [日志清理完成]" >> "$f"
+                        echo "已处理文件: $f"
                     fi
                   done
                   echo "完成"$(date "+%Y-%m-%d %H:%M:%S")
                   exit 0
+              resources:
+                requests:
+                  memory: 96Mi
+                  cpu: 200m
+                limits:
+                  memory: 256Mi
+                  cpu: 1
