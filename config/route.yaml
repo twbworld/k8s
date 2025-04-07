@@ -55,7 +55,11 @@ metadata:
   name: circuit-breaker
 spec:
   circuitBreaker:
-    expression: LatencyAtQuantileMS(70.0) > 2000 || NetworkErrorRatio() > 0.5 || ResponseCodeRatio(500, 600, 0, 600) > 0.5 #达70.0%(要有小数点)流量的网络延迟超2秒, 或网络错误率达50%, 或50%流量返回5XX 触发
+    expression: > #达?%(要有小数点)流量的网络延迟超?秒, 或网络错误率>?%, 或5xx比例>80% 触发
+      LatencyAtQuantileMS(90.0) > 5000 ||
+      NetworkErrorRatio() > 0.8 ||
+      ResponseCodeRatio(500, 600, 0, 600) > 0.8
+      
 --- #强制转https(traefik初始配置已设, 这冗余)
 # apiVersion: traefik.io/v1alpha1
 # kind: Middleware
@@ -81,18 +85,15 @@ spec:
   headers:
     frameDeny: true #禁止外源iframes,减少点击劫持
     customFrameOptionsValue: SAMEORIGIN #禁止外源iframes,减少点击劫持
-    customBrowserXSSValue: "1; mode=block" #防XSS攻击
+    customBrowserXSSValue: "1; mode=block" #禁用旧版XSS过滤器（可能引入漏洞）防XSS攻击
     contentTypeNosniff: true #禁止服务器自动解析资源类型
     stsIncludeSubdomains: true #启用HSTS;要求浏览器总是通过 https
     stsPreload: true #启用HSTS;要求浏览器总是http跳转到https
+    stsSeconds: 31536000 # 1年有效期
     customResponseHeaders:
       Wall: "Hi! Welcome!"
-      Strict-Transport-Security: "max-age=31536000; includeSubDomains; preload" #启用HSTS;要求浏览器总是通过 https
-      X-XSS-Protection: "0" #禁用旧版XSS过滤器（可能引入漏洞）
       Alt-Svc: 'h3=":443"; h3-29=":443"' #备选服务
-      X-Content-Type-Options: "nosniff" #禁止服务器自动解析资源类型
-      Content-Security-Policy: "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; font-src 'self'; connect-src 'self'; frame-src 'none'" #关键CSP策略
-      Referrer-Policy: "no-referrer-when-downgrade" # 控制 Referer 头泄露
+      Referrer-Policy: "no-referrer-when-downgrade" # 控制Referer头泄露
 --- #错误页
 apiVersion: traefik.io/v1alpha1
 kind: Middleware
@@ -349,11 +350,9 @@ spec:
             group: traefik.io
             kind: Middleware
             name: http
-        - type: RequestRedirect
-          requestRedirect:
-            hostname: xr.404502.xyz #回落假页面
-            statusCode: 301
       backendRefs:
+        - name: pan-svc #分配到假页面
+          port: 80
 --- #xray-www
 apiVersion: gateway.networking.k8s.io/v1
 kind: HTTPRoute
@@ -372,11 +371,9 @@ spec:
             group: traefik.io
             kind: Middleware
             name: http
-        - type: RequestRedirect
-          requestRedirect:
-            hostname: xr.404502.xyz
-            statusCode: 301
       backendRefs:
+        - name: pan-svc #分配到假页面
+          port: 80
 --- #traefik面板
 apiVersion: gateway.networking.k8s.io/v1
 kind: HTTPRoute
