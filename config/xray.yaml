@@ -89,6 +89,12 @@ spec:
             timeoutSeconds: 1
             tcpSocket:
               port: cp
+          livenessProbe:
+            initialDelaySeconds: 30
+            periodSeconds: 10
+            timeoutSeconds: 3
+            tcpSocket:
+              port: cp
           resources:
             requests:
               memory: 16Mi

@@ -104,6 +104,14 @@ spec:
               scheme: HTTP
               port: cp
               path: /
+          livenessProbe:
+            initialDelaySeconds: 30
+            periodSeconds: 10
+            timeoutSeconds: 3
+            httpGet:
+              scheme: HTTP
+              port: cp
+              path: /
           resources:
             requests:
               memory: 96Mi
