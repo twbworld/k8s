@@ -114,11 +114,11 @@ spec:
               path: /
           resources:
             requests:
-              memory: 96Mi
-              cpu: 200m
+              memory: 80Mi
+              cpu: 100m
             limits:
               memory: 256Mi
-              cpu: 1
+              cpu: 500m
 
 ---
 apiVersion: v1

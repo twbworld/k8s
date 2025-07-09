@@ -77,7 +77,7 @@ spec:
       labels:
         app: mysql-container
       annotations:
-        changeRollingUpdate: K8S_MYSQL #此值一旦有变化(k8s无法获取系统变量,这里通过脚本或手工更改), apply此yaml就会重新部署(滚动更新)
+        changeRollingUpdate: K8S_MYSQL #此值一旦有变化, apply此yaml就会重新部署(滚动更新)
     spec:
       nodeSelector:
         mysql-db: "true" #在特定label的节点上启动

@@ -97,10 +97,10 @@ spec:
               port: cp
           resources:
             requests:
-              memory: 16Mi
-              cpu: 500m
+              memory: 32Mi
+              cpu: 200m
             limits:
-              memory: 256Mi
+              memory: 320Mi
               cpu: 1
 
 ---
@@ -143,7 +143,7 @@ spec:
     kind: Deployment
     name: xray-deploy
   minReplicas: 1
-  maxReplicas: 4
+  maxReplicas: 2
   metrics:
     - type: Resource
       resource:
