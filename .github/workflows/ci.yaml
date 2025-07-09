@@ -33,7 +33,7 @@ jobs:
         uses: stackrox/kube-linter-action@v1 #审查k8s的yaml配置
         continue-on-error: ${{ inputs.continue-on-error == '' && true || inputs.continue-on-error }} #非workflow_call触发inputs为空
         with:
-          directory: ./
+          directory: ./config
           # config: ../kube-linter-config.yaml
           format: sarif
           output-file: ../kube-linter.sarif
