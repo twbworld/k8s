@@ -78,11 +78,7 @@ spec:
           imagePullPolicy: IfNotPresent
           env:
             - name: TZ
-              valueFrom:
-                configMapKeyRef:
-                  name: global
-                  key: timezone
-                  optional: true
+              value: Asia/Shanghai
             - name: TOKEN
               valueFrom:
                 configMapKeyRef:

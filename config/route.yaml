@@ -1,16 +1,26 @@
 #需配置Gateway API CRD(位于config/gateway-api.yaml)才能使用gateway.networking.k8s.io资源
-#k3s已自动配置IngressRoute CRD
 #route使用参考代码: https://github.com/kubernetes-sigs/gateway-api/tree/main/examples
-#对tls设置sni规则时发现, 优先级:IngressRouteTCP > TLSRoute; 即优先级:IngressRoute模式 > Gateway API模式
-#设置http规则时发现, 优先级:HTTPRoute > IngressRoute; 即优先级:Gateway API模式 > IngressRoute模式
+#设置tls的sni规则时发现, 优先级:IngressRoute > Gateway API
+#设置http规则时发现, 优先级:Gateway API > IngressRoute
 #使用IngressRoute模式同时设置"IngressRouteTCP"的sni规则和"IngressRoute"验证https, 即优先级:IngressRoute > IngressRouteTCP
 
 #traefik中间件(优先使用Gateway API标准设置而不是中间件设置; 如设置filters.type)================begin
+--- #拒绝直接IP访问
+apiVersion: traefik.io/v1alpha1
+kind: Middleware
+metadata:
+  name: block-ip
+spec:
+  ipAllowList:
+    sourceRange:
+      - "127.0.0.1/32" #只允许本地，变相拒绝外部所有直接IP访问
+
 --- #公用规则合并
 apiVersion: traefik.io/v1alpha1
 kind: Middleware
 metadata:
-  name: common
+  name: group1
+  namespace: default
 spec:
   chain:
     middlewares:
@@ -22,10 +32,11 @@ apiVersion: traefik.io/v1alpha1
 kind: Middleware
 metadata:
   name: http
+  namespace: default
 spec:
   chain:
     middlewares:
-      - name: common
+      - name: group1
       # - name: http2https
       - name: compress
       - name: add-header
@@ -38,7 +49,10 @@ metadata:
   name: worker-processes
 spec:
   inFlightReq:
-    amount: 10
+    amount: 100
+    sourceCriterion:
+      ipStrategy:
+        depth: 0
 --- #限流
 apiVersion: traefik.io/v1alpha1
 kind: Middleware
@@ -59,7 +73,7 @@ spec:
       LatencyAtQuantileMS(90.0) > 5000 ||
       NetworkErrorRatio() > 0.8 ||
       ResponseCodeRatio(500, 600, 0, 600) > 0.8
-      
+
 --- #强制转https(traefik初始配置已设, 这冗余)
 # apiVersion: traefik.io/v1alpha1
 # kind: Middleware
@@ -126,16 +140,17 @@ kind: MiddlewareTCP
 metadata:
   name: inflightconn
 spec:
-  inFlightConn:
-    amount: 10
+  inFlightConn: #并发 TCP 连接
+    amount: 200
 --- #密码授权验证
 apiVersion: traefik.io/v1alpha1
 kind: Middleware
 metadata:
   name: auth
+  namespace: default
 spec:
   basicAuth:
-    secret: traefik-dashboard
+    secret: traefik-dashboard-secret
     removeHeader: true #删除验证头
 #================end
 
@@ -146,6 +161,8 @@ metadata:
   name: tls-conf
 spec:
   minVersion: VersionTLS12 # 最低TLS版本
+  sniStrict: true # 强制 SNI 检查，防止 IP 扫描泄露域名
+  preferServerCipherSuites: true # 优先使用服务器端加密套件
   cipherSuites: # 允许的加密套件
     - TLS_AES_256_GCM_SHA384 #TLS1.3
     - TLS_CHACHA20_POLY1305_SHA256 #TLS1.3
@@ -160,8 +177,14 @@ spec:
     - X25519
     - CurveP256
     - CurveP384
-  sniStrict: true # 是否强制SNI匹配
-  preferServerCipherSuites: true # 优先使用服务器端加密套件
+--- #在`Service`模块引用此功能, 且需要Traefik-CRD;(测试失败,猜测是traefik版本问题)
+apiVersion: traefik.io/v1alpha1
+kind: ServersTransportTCP
+metadata:
+  name: proxy-protocol
+spec:
+  proxyProtocol:
+    version: 2
 ---
 apiVersion: gateway.networking.k8s.io/v1
 kind: GatewayClass
@@ -188,25 +211,19 @@ spec:
     - name: sni-frp
       protocol: TLS
       port: 443
-      hostname: "frp.twbhub.top"
+      hostname: frp.twbhub.top
       tls:
         mode: Passthrough #透传TLS,用于四层网络SNI分流
-    - name: sni-xray-r
+    - name: sni-xray
       protocol: TLS
       port: 443
-      hostname: "r.404502.xyz"
+      hostname: "*.404502.xyz"
       tls:
         mode: Passthrough
-    - name: sni-xray-x
+    - name: sni-xray-target
       protocol: TLS
       port: 443
-      hostname: "x.404502.xyz"
-      tls:
-        mode: Passthrough
-    - name: sni-xray-xr
-      protocol: TLS
-      port: 443
-      hostname: "xr.404502.xyz"
+      hostname: mail.mypeter.net
       tls:
         mode: Passthrough
     - name: web
@@ -218,6 +235,10 @@ spec:
       hostname: twbhub.top
       tls:
         mode: Terminate
+        options:
+          kind: TLSOption
+          name: tls-conf
+          group: traefik.io
         certificateRefs:
           - name: tls-secret #也可用traefik-TLSStore等方式配置
     - name: websecure
@@ -257,37 +278,26 @@ spec:
         certificateRefs:
           - name: xray-secret
 
---- #SSH流量
-apiVersion: gateway.networking.k8s.io/v1alpha2
-kind: TCPRoute
+--- #默认流量(未匹配到其他规则时使用)
+apiVersion: gateway.networking.k8s.io/v1
+kind: HTTPRoute
 metadata:
-  name: frp-ssh
-  annotations:
-    traefik.ingress.kubernetes.io/router.tcp.middlewares: inflightconn@kubernetescrd #因为TCPRoute无法使用traefik中间件,使用在此配置
+  name: catch-all-ip
 spec:
   parentRefs:
     - name: traefik-gtw
-      sectionName: ssh
+      sectionName: web
   rules:
     - backendRefs:
-        - name: frp-svc
-          port: 22
---- #frp-http流量
-apiVersion: gateway.networking.k8s.io/v1alpha2
-kind: TLSRoute
-metadata:
-  name: frp-http
-spec:
-  parentRefs:
-    - name: traefik-gtw
-      sectionName: sni-frp
-  hostnames:
-    - frp.twbhub.top
-  rules:
-    - backendRefs:
-        - name: frp-svc
-          port: 443
---- #xray流量r
+        - name: pan-svc
+          port: 80
+      filters:
+        - type: ExtensionRef
+          extensionRef:
+            group: traefik.io
+            kind: Middleware
+            name: block-ip
+--- #xray流量r,使用自己的域名不安全,后期删除(并删除cf的dns)
 apiVersion: gateway.networking.k8s.io/v1alpha2
 kind: TLSRoute
 metadata:
@@ -295,9 +305,24 @@ metadata:
 spec:
   parentRefs:
     - name: traefik-gtw
-      sectionName: sni-xray-r
+      sectionName: sni-xray
   hostnames:
     - r.404502.xyz
+  rules:
+    - backendRefs:
+        - name: xray-svc
+          port: 443
+--- #xray流量reality
+apiVersion: gateway.networking.k8s.io/v1alpha2
+kind: TLSRoute
+metadata:
+  name: xray-target
+spec:
+  parentRefs:
+    - name: traefik-gtw
+      sectionName: sni-xray-target
+  hostnames:
+    - mail.mypeter.net
   rules:
     - backendRefs:
         - name: xray-svc
@@ -310,7 +335,7 @@ metadata:
 spec:
   parentRefs:
     - name: traefik-gtw
-      sectionName: sni-xray-x
+      sectionName: sni-xray
   hostnames:
     - x.404502.xyz
   rules:
@@ -325,9 +350,24 @@ metadata:
 spec:
   parentRefs:
     - name: traefik-gtw
-      sectionName: sni-xray-xr
+      sectionName: sni-xray
   hostnames:
     - xr.404502.xyz
+  rules:
+    - backendRefs:
+        - name: xray-svc
+          port: 8443
+--- #xray流量xg
+apiVersion: gateway.networking.k8s.io/v1alpha2
+kind: TLSRoute
+metadata:
+  name: xray-xg
+spec:
+  parentRefs:
+    - name: traefik-gtw
+      sectionName: sni-xray
+  hostnames:
+    - xg.404502.xyz
   rules:
     - backendRefs:
         - name: xray-svc
@@ -460,27 +500,6 @@ spec:
       backendRefs:
         - name: proxy-svc
           port: 80
---- #AI
-apiVersion: gateway.networking.k8s.io/v1
-kind: HTTPRoute
-metadata:
-  name: ai
-spec:
-  parentRefs:
-    - name: traefik-gtw
-      sectionName: websecure
-  hostnames:
-    - ai.twbhub.top
-  rules:
-    - filters:
-        - type: ExtensionRef
-          extensionRef:
-            group: traefik.io
-            kind: Middleware
-            name: common
-      backendRefs:
-        - name: ai-svc
-          port: 80
 --- #小程序
 apiVersion: gateway.networking.k8s.io/v1
 kind: HTTPRoute
@@ -505,27 +524,6 @@ spec:
       backendRefs:
         - name: dating-svc
           port: 80
---- #青龙面板
-apiVersion: gateway.networking.k8s.io/v1
-kind: HTTPRoute
-metadata:
-  name: ql
-spec:
-  parentRefs:
-    - name: traefik-gtw
-      sectionName: websecure
-  hostnames:
-    - ql.twbhub.top
-  rules:
-    - filters:
-        - type: ExtensionRef
-          extensionRef:
-            group: traefik.io
-            kind: Middleware
-            name: http
-      backendRefs:
-        - name: ql-svc
-          port: 80
 --- #Bitwarden
 apiVersion: gateway.networking.k8s.io/v1
 kind: HTTPRoute
@@ -547,3 +545,54 @@ spec:
       backendRefs:
         - name: bw-svc
           port: 80
+--- #SSH流量
+# apiVersion: gateway.networking.k8s.io/v1alpha2
+# kind: TCPRoute
+# metadata:
+#   name: frp-ssh
+#   annotations:
+#     traefik.ingress.kubernetes.io/router.tcp.middlewares: inflightconn@kubernetescrd #因为TCPRoute无法使用traefik中间件,使用在此配置
+# spec:
+#   parentRefs:
+#     - name: traefik-gtw
+#       sectionName: ssh
+#   rules:
+#     - backendRefs:
+#         - name: frp-svc
+#           port: 22
+--- #frp-http流量
+# apiVersion: gateway.networking.k8s.io/v1alpha2
+# kind: TLSRoute
+# metadata:
+#   name: frp-http
+# spec:
+#   parentRefs:
+#     - name: traefik-gtw
+#       sectionName: sni-frp
+#   hostnames:
+#     - frp.twbhub.top
+#   rules:
+#     - backendRefs:
+#         - name: frp-svc
+#           port: 443
+--- #青龙面板
+# apiVersion: gateway.networking.k8s.io/v1
+# kind: HTTPRoute
+# metadata:
+#   name: ql
+# spec:
+#   parentRefs:
+#     - name: traefik-gtw
+#       sectionName: websecure
+#   hostnames:
+#     - ql.twbhub.top
+#   rules:
+#     - filters:
+#         - type: ExtensionRef
+#           extensionRef:
+#             group: traefik.io
+#             kind: Middleware
+#             name: http
+#       backendRefs:
+#         - name: ql-svc
+#           port: 80

@@ -45,11 +45,7 @@ spec:
               containerPort: 5700
           env:
             - name: TZ
-              valueFrom:
-                configMapKeyRef:
-                  name: global
-                  key: timezone
-                  optional: true
+              value: Asia/Shanghai
           volumeMounts:
             - name: ql-data
               mountPath: /ql/data

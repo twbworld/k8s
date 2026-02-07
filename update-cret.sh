@@ -1,5 +1,5 @@
 #!/bin/bash
-# acme.sh --install-cert -d "test.com" -d "*.test.com" --key-file test.com/key.pem --fullchain-file test.com/cert.pem --reloadcmd "update-cret.sh tls-secret test.com/cert.pem test.com/key.pem"
+# update-cret.sh tls-secret data/cert/xxx.com/tls.crt data/cert/xxx.com/tls.key
 
 # 设置变量
 DEPLOY_RESTART=("xray") # pod内需用证书,要重启的部署的关键字

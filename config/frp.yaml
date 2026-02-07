@@ -23,7 +23,7 @@ spec:
       volumes:
         - name: frp
           configMap:
-            name: frp
+            name: frp-cm
       containers:
         - name: frp-container
           image: snowdreamtech/frps:0.61
@@ -37,11 +37,7 @@ spec:
               containerPort: 22
           env:
             - name: TZ
-              valueFrom:
-                configMapKeyRef:
-                  name: global
-                  key: timezone
-                  optional: true
+              value: Asia/Shanghai
           volumeMounts:
             - name: frp
               mountPath: /etc/frp/

@@ -1,62 +1,58 @@
 #CronJob立即执行: kubectl create job --from=cronjob/xxx xxx
 ---
 #定时清理log
-apiVersion: batch/v1
-kind: CronJob
-metadata:
-  name: log-clear
-spec:
-  schedule: "5 16 * * *" #注意系统环境时区
-  jobTemplate:
-    spec:
-      template:
-        spec:
-          restartPolicy: Never
-          volumes:
-            - name: log
-              persistentVolumeClaim:
-                claimName: log
-          containers:
-            - name: log-clear
-              image: busybox:1.37
-              imagePullPolicy: IfNotPresent
-              env:
-                - name: TZ
-                  valueFrom:
-                    configMapKeyRef:
-                      name: global
-                      key: timezone
-                      optional: true
-              volumeMounts:
-                - name: log
-                  mountPath: /var/www/logs/
-              command:
-                - /bin/sh
-                - -c
-                - |-
-                  set -e
-                  size="10240k" #处理过大文件
-                  row=999 #保留行数
-                  path="/var/www/logs/"
-                  if [ ! -d "$path" ]; then
-                    echo "路径不存在[orgjioocs]"
-                    exit 1
-                  fi
-                  for f in $(find $path -name "*.log" -type f -size +$size); do
-                    r=$(wc -l < "$f")
-                    d=$(expr $r - $row)
-                    if [ $r -gt $row ]; then
-                        sed -i "1,${d}d" $f
-                        echo "$(date "+%Y-%m-%d %H:%M:%S") [日志清理完成]" >> "$f"
-                        echo "已处理文件: $f"
-                    fi
-                  done
-                  echo "完成"$(date "+%Y-%m-%d %H:%M:%S")
-                  exit 0
-              resources:
-                requests:
-                  memory: 96Mi
-                  cpu: 200m
-                limits:
-                  memory: 256Mi
-                  cpu: 1
+# apiVersion: batch/v1
+# kind: CronJob
+# metadata:
+#   name: log-clear
+# spec:
+#   schedule: "5 16 * * *" #注意系统环境时区
+#   jobTemplate:
+#     spec:
+#       template:
+#         spec:
+#           restartPolicy: Never
+#           volumes:
+#             - name: log
+#               persistentVolumeClaim:
+#                 claimName: log
+#           containers:
+#             - name: log-clear
+#               image: busybox:1.37
+#               imagePullPolicy: IfNotPresent
+#               env:
+#                 - name: TZ
+#                   value: Asia/Shanghai
+#               volumeMounts:
+#                 - name: log
+#                   mountPath: /var/www/logs/
+#               command:
+#                 - /bin/sh
+#                 - -c
+#                 - |-
+#                   set -e
+#                   size="10240k" #处理过大文件
+#                   row=999 #保留行数
+#                   path="/var/www/logs/"
+#                   if [ ! -d "$path" ]; then
+#                     echo "路径不存在[orgjioocs]"
+#                     exit 1
+#                   fi
+#                   for f in $(find $path -name "*.log" -type f -size +$size); do
+#                     r=$(wc -l < "$f")
+#                     d=$(expr $r - $row)
+#                     if [ $r -gt $row ]; then
+#                         sed -i "1,${d}d" $f
+#                         echo "$(date "+%Y-%m-%d %H:%M:%S") [日志清理完成]" >> "$f"
+#                         echo "已处理文件: $f"
+#                     fi
+#                   done
+#                   echo "完成"$(date "+%Y-%m-%d %H:%M:%S")
+#                   exit 0
+#               resources:
+#                 requests:
+#                   memory: 96Mi
+#                   cpu: 200m
+#                 limits:
+#                   memory: 256Mi
+#                   cpu: 1

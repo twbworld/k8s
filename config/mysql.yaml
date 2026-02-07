@@ -4,6 +4,8 @@ apiVersion: v1
 kind: ConfigMap
 metadata:
   name: mysql-cm
+  labels:
+    app: mysql
 data:
   my.cnf: |
     [mysqld]
@@ -53,15 +55,18 @@ apiVersion: apps/v1
 kind: StatefulSet #专门管理有状态服务(如mysql), 区别于"Deployment"
 metadata:
   name: mysql-sts #元数据名称
+  labels:
+    app: mysql
 spec:
   serviceName: mysql-svc #!!!关键
   replicas: 1 # #副本数;默认1,多个可负载均衡
-  minReadySeconds: 5 #等待容器[minReadySeconds]秒后再确定是否可提供服务;默认0
+  revisionHistoryLimit: 2 # 限制历史版本，节省 etcd 空间
+  minReadySeconds: 5 #等待容器[minReadySeconds]秒后再确定是否可提供服务;默认0;在设置了[ReadinessProbe]且[replicas]为1时没必要设置
   updateStrategy: #StatefulSet更新策略
-    type: RollingUpdate
+    type: RollingUpdate #RollingUpdate:滚动更新
   selector: #控制器, 管理指定app标签的template
     matchLabels:
-      app: mysql-container #匹配spec.template.metadata.labels
+      app: mysql #匹配spec.template.metadata.labels
   volumeClaimTemplates: #会自动创建pvc和pv并关联指定存储类(StorageClass);与直接使用持久卷声明(PersistentVolumeClaim)不同,volumeClaimTemplates会为每个副本生成pvc而非共用
     - metadata:
         name: mysql-data
@@ -75,7 +80,7 @@ spec:
   template: #创建Pod模板
     metadata:
       labels:
-        app: mysql-container
+        app: mysql
       annotations:
         changeRollingUpdate: K8S_MYSQL #此值一旦有变化, apply此yaml就会重新部署(滚动更新)
     spec:
@@ -84,9 +89,10 @@ spec:
       tolerations:
         - key: "" #key为空,设置容忍所有污点, 防止节点被设置污点
           operator: "Exists" #Equal(默认):key=value相同,需要设置value;"Exists":存在相同key值就符合
-      restartPolicy: Always
-      priorityClassName: system-cluster-critical #绑定PriorityClass,用于设置pod优先级(重要性)
+      priorityClassName: critical-pc #绑定PriorityClass,用于设置pod优先级(重要性)
       terminationGracePeriodSeconds: 10 #给即将被强制清除的pod的缓冲时间
+      restartPolicy: Always
+      # initContainers: #初始化容器, 在主容器启动前运行, 常用于准备工作
       volumes:
         - name: cm
           configMap:
@@ -96,11 +102,18 @@ spec:
           persistentVolumeClaim:
             claimName: log
       containers:
-        - name: mysql-container
+        - name: mysql-server
           image: mysql:8.0-debian #设置latest使得k8s难以追踪和回滚镜像; mysql默认版本会出现无法读取配置文件的问题
           imagePullPolicy: IfNotPresent #镜像拉取策略;Always:始终从远程拉取;Never:始终本地;IfNotPresent:本地不存在镜像才拉取
           securityContext:
             privileged: false #权限控制
+          resources:
+            requests:
+              memory: 128Mi
+              cpu: 200m
+            limits:
+              memory: 512Mi
+              cpu: 1
           ports:
             - name: cp
               containerPort: 3306
@@ -125,11 +138,12 @@ spec:
                   key: root-pwd
           volumeMounts:
             - name: cm
-              mountPath: /etc/mysql/conf.d/
               # subPath: my.cnf #subPath挂载单个文件(缺点: configMap更新后, 挂载的文件不会更新)
+              mountPath: /etc/mysql/conf.d/
+              readOnly: true
             - name: log
-              mountPath: /var/www/logs/
               subPathExpr: mysql-$(UUID) #使用卷下的目录,没有则创建
+              mountPath: /var/www/logs/
             - name: mysql-data
               mountPath: /var/lib/mysql
           # lifecycle:
@@ -149,25 +163,27 @@ spec:
             timeoutSeconds: 3 #连接超时
             exec:
               command: ["mysqladmin", "ping", "-h127.0.0.1"]
-          resources:
-            requests:
-              memory: 128Mi
-              cpu: 200m
-            limits:
-              memory: 512Mi
-              cpu: 1
+          lifecycle:
+            preStop: #容器终止前阻塞式执行（必须完成才 kill）
+              exec:
+                command: ["/bin/sh", "-c", "sleep 15"]  # 配合 terminationGracePeriodSeconds
 
 ---
 apiVersion: v1
 kind: Service
 metadata:
   name: mysql-svc
+  labels:
+    app: mysql
 spec:
   selector:
-    app: mysql-container
+    app: mysql #匹配spec.template.metadata.labels
   # type: ClusterIP #ClusterIP(默认)/NodePort/LoadBalancer(这个模式与k8s不同, k3s不依赖云服务,而在每个node上部署一个svclb的pod做流量转发)
   clusterIP: None #无头服务(Headless Service),让每个pod都有了特定地址(podName.svcName(可在pod内查看hosts))从而可直接访问(相对的,正常service会随机选pod实现负载均衡,没有特定访问地址);如:"mysql读写分离"需对单个pod进行"写"操作,因此就需要特定地址
-  sessionAffinity: ClientIP #会话保持,奇怪不生效
+  sessionAffinity: ClientIP #会话保持
+  sessionAffinityConfig:
+    clientIP:
+      timeoutSeconds: 3600
   ports:
     - name: sp
       port: 3306 #对外端口

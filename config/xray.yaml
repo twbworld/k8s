@@ -3,86 +3,88 @@ apiVersion: apps/v1
 kind: Deployment
 metadata:
   name: xray-deploy
+  labels:
+    app: xray
 spec:
   replicas: 1
-  minReadySeconds: 5
+  revisionHistoryLimit: 2
+  minReadySeconds: 10
   strategy:
     type: RollingUpdate
+    rollingUpdate:
+      maxUnavailable: 0
+      maxSurge: 1
   selector:
     matchLabels:
-      app: xray-container
+      app: xray
   template:
     metadata:
-      name: xray-deploy
       labels:
-        app: xray-container
+        app: xray
     spec:
+      priorityClassName: critical-pc
+      terminationGracePeriodSeconds: 30
       restartPolicy: Always
-      priorityClassName: system-cluster-critical
-      terminationGracePeriodSeconds: 10
       volumes:
-        - name: cm
+        - name: config
           configMap:
             name: xray-cm
         - name: tls
           secret:
             secretName: xray-secret
-        - name: log
-          persistentVolumeClaim:
-            claimName: log
       initContainers:
         - name: wait-pan
-          image: alpine:3.21
+          image: curlimages/curl:latest
           imagePullPolicy: IfNotPresent
-          command:
-            - sh
-            - -c
+          resources:
+            limits:
+              memory: 64Mi
+              cpu: 200m
+          command: ["sh", "-c"]
+          args:
             - |
               set -e
-              sed -i 's/dl-cdn.alpinelinux.org/mirrors.aliyun.com/g' /etc/apk/repositories
-              apk add -f --no-cache curl
-              maxTries=15
-              while [ $maxTries -gt 0 ] && ! curl -sSf pan-svc:80 > /dev/null;do
-                  echo '等待pan可用'
-                  sleep 1
-                  maxTries=$(( $maxTries - 1 ))
+              for i in $(seq 1 15); do
+                if curl -sf http://pan-svc:80 >/dev/null 2>&1; then
+                  echo "pan已启动"
+                  exit 0
+                fi
+                echo "⏳ Waiting for pan-svc (attempt $i/15)..."
+                sleep 2
               done
-              if [ $maxTries -le 0 ]; then
-                  echo >&2 'error: 尝试多次连接pan服务失败'
-                  exit 1
-              fi
-              echo 'pan已启动'
+              echo "pan未启动" >&2
+              exit 1
       containers:
-        - name: xray-container
-          image: ghcr.io/xtls/xray-core:latest
-          imagePullPolicy: Always
+        - name: xray-server
+          image: ghcr.io/xtls/xray-core:26.2.6
+          imagePullPolicy: IfNotPresent
+          resources:
+            requests:
+              memory: 80Mi
+              cpu: 50m
+            limits:
+              memory: 512Mi
+              cpu: 1000m
           ports:
             - name: cp
               containerPort: 443
             - name: cp-xtls
               containerPort: 80
-            - name: cp-ws
+            - name: cp-xhttp
+              containerPort: 8443
+            - name: cp-grpc
               containerPort: 8080
           env:
             - name: TZ
-              valueFrom:
-                configMapKeyRef:
-                  name: global
-                  key: timezone
-                  optional: true
-            - name: UUID
-              valueFrom:
-                fieldRef:
-                  apiVersion: v1
-                  fieldPath: metadata.uid
+              value: Asia/Shanghai
           volumeMounts:
-            - name: cm
+            - name: config
               mountPath: /etc/xray/
+              readOnly: true
             - name: tls
-              mountPath: /root/cert/
-            - name: log
-              mountPath: /var/log/xray/
-              subPathExpr: xray-$(UUID)
+              mountPath: /etc/cert/
+              readOnly: true
+          command: ["/usr/local/bin/xray", "-confdir", "/etc/xray/"]
           readinessProbe:
             initialDelaySeconds: 5
             periodSeconds: 5
@@ -95,76 +97,34 @@ spec:
             timeoutSeconds: 3
             tcpSocket:
               port: cp
-          resources:
-            requests:
-              memory: 32Mi
-              cpu: 200m
-            limits:
-              memory: 320Mi
-              cpu: 1
+          lifecycle:
+            preStop:
+              exec:
+                command: ["/bin/sh", "-c", "sleep 10"]
 
 ---
 apiVersion: v1
 kind: Service
 metadata:
   name: xray-svc
+  labels:
+    app: xray
+  annotations:
+    # traefik.io/service.serverstransporttcp: default-proxy-protocol@kubernetescrd
 spec:
   selector:
-    app: xray-container
-  type: NodePort
+    app: xray
+  type: ClusterIP
   sessionAffinity: ClientIP
+  sessionAffinityConfig:
+    clientIP:
+      timeoutSeconds: 10800
   ports:
     - name: sp
       port: 443
     - name: sp-xtls
       port: 80
-    - name: sp-ws
+    - name: sp-xhttp
+      port: 8443
+    - name: sp-grpc
       port: 8080
-
----
-apiVersion: autoscaling/v2
-kind: HorizontalPodAutoscaler
-metadata:
-  name: hpa-xray
-status:
-  observedGeneration: 1
-  currentReplicas: 1
-  desiredReplicas: 1
-  currentMetrics:
-    - type: Resource
-      resource:
-        name: cpu
-        current:
-          averageUtilization: 0
-          averageValue: 0
-spec:
-  scaleTargetRef:
-    apiVersion: apps/v1
-    kind: Deployment
-    name: xray-deploy
-  minReplicas: 1
-  maxReplicas: 2
-  metrics:
-    - type: Resource
-      resource:
-        name: cpu
-        target:
-          type: Utilization
-          averageUtilization: 80
-  behavior:
-    scaleUp:
-      stabilizationWindowSeconds: 0
-      policies:
-        - type: Percent
-          value: 100
-          periodSeconds: 15
-        - type: Pods
-          value: 2
-          periodSeconds: 15
-      selectPolicy: Max
-    scaleDown:
-      stabilizationWindowSeconds: 300
-      policies:
-        - type: Percent
-          value: 100
-          periodSeconds: 15

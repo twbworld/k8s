@@ -3,22 +3,25 @@ apiVersion: apps/v1
 kind: Deployment
 metadata:
   name: dating-deploy
+  labels:
+    app: dating
 spec:
   replicas: 1
-  minReadySeconds: 5
+  revisionHistoryLimit: 2
+  minReadySeconds: 10
   strategy:
-    type: RollingUpdate
+    type: Recreate
   selector:
     matchLabels:
-      app: dating-container
+      app: dating
   template:
     metadata:
-      name: dating-deploy
       labels:
-        app: dating-container
+        app: dating
     spec:
+      priorityClassName: normal-pc
+      terminationGracePeriodSeconds: 30
       restartPolicy: Always
-      terminationGracePeriodSeconds: 10
       volumes:
         - name: sqlite-data
           hostPath:
@@ -28,31 +31,45 @@ spec:
           hostPath:
             type: DirectoryOrCreate
             path: /var/www/k8s/data/tmp/dating/static/
-        - name: log
-          persistentVolumeClaim:
-            claimName: log
         - name: config
           configMap:
-            name: dating-config
+            name: dating-cm
+      initContainers:
+        #k8s不像docker会自动将镜像内文件复制到空Volume中, 需手动
+        - name: init-static
+          image: ghcr.io/twbworld/dating:1.3.3
+          imagePullPolicy: IfNotPresent
+          resources:
+            limits:
+              memory: 128Mi
+              cpu: 200m
+          command: ["/bin/sh", "-c"]
+          args:
+            - |
+              if [ -z "$(ls -A /data-target)" ]; then
+                echo "将文件复制到空挂载目录"
+                cp -r /app/static/* /data-target/
+              fi
+          volumeMounts:
+            - name: static
+              mountPath: /data-target
       containers:
         - name: dating-container
           image: ghcr.io/twbworld/dating:1.3.3
           imagePullPolicy: IfNotPresent
+          resources:
+            requests:
+              memory: 48Mi
+              cpu: 20m
+            limits:
+              memory: 128Mi
+              cpu: 400m
           ports:
             - name: cp
               containerPort: 80
           env:
             - name: TZ
-              valueFrom:
-                configMapKeyRef:
-                  name: global
-                  key: timezone
-                  optional: true
-            - name: UUID
-              valueFrom:
-                fieldRef:
-                  apiVersion: v1
-                  fieldPath: metadata.uid
+              value: Asia/Shanghai
           volumeMounts:
             - name: sqlite-data
               mountPath: /app/tmp/
@@ -60,9 +77,6 @@ spec:
               mountPath: /app/static/
             - name: config
               mountPath: /volume/config/
-            - name: log
-              mountPath: /app/log/
-              subPathExpr: dating-$(UUID)
           command:
             - /bin/sh
             - -c
@@ -77,84 +91,30 @@ spec:
               port: cp
               path: /
           livenessProbe:
-            initialDelaySeconds: 30
+            initialDelaySeconds: 15
             periodSeconds: 10
             timeoutSeconds: 3
             httpGet:
               scheme: HTTP
               port: cp
               path: /
-          resources:
-            requests:
-              memory: 100Mi
-              cpu: 150m
-            limits:
-              memory: 320Mi
-              cpu: 500m
+          lifecycle:
+            preStop:
+              exec:
+                command: ["/bin/sh", "-c", "sleep 5"]
 
 ---
 apiVersion: v1
 kind: Service
 metadata:
   name: dating-svc
+  labels:
+    app: dating
 spec:
-  selector:
-    app: dating-container
   type: ClusterIP
   sessionAffinity: ClientIP
+  selector:
+    app: dating
   ports:
     - name: sp
       port: 80
-
----
-#自动扩缩
-#https://access.redhat.com/documentation/zh-cn/openshift_container_platform/4.13/html/nodes/nodes-pods-autoscaling
-#压力测试: kubectl run --rm -it --image=busybox:latest --restart=Never test -- /bin/sh -c "while sleep 0.01; do wget -q -O- http://dating-svc:80/test.html; done"
-#需要给容器定义resources配置
-apiVersion: autoscaling/v2
-kind: HorizontalPodAutoscaler
-metadata:
-  name: hpa-dating
-status:
-  observedGeneration: 1
-  # lastScaleTime: <some-time>
-  currentReplicas: 1
-  desiredReplicas: 1
-  currentMetrics:
-    - type: Resource
-      resource:
-        name: cpu
-        current:
-          averageUtilization: 0
-          averageValue: 0
-spec:
-  scaleTargetRef:
-    apiVersion: apps/v1
-    kind: Deployment
-    name: dating-deploy
-  minReplicas: 1
-  maxReplicas: 2 #最大的pod的数量
-  metrics:
-    - type: Resource
-      resource:
-        name: cpu
-        target: #当pod的[name]使用率达到[resources.requests]的[averageUtilization]%时进行扩容
-          type: Utilization
-          averageUtilization: 80
-  behavior:
-    scaleUp:
-      stabilizationWindowSeconds: 0 # 需要扩容时，立即扩容
-      policies:
-        - type: Percent
-          value: 100
-          periodSeconds: 15 # 每[periodSeconds]秒最大允许扩容数量为当前Pod数量的[value]%
-        - type: Pods
-          value: 1
-          periodSeconds: 15 # 每[periodSeconds]秒最大允许扩容[value]个 Pod
-      selectPolicy: Max # 使用以上两种扩容策略中算出来扩容 Pod 数量最大的
-    scaleDown:
-      stabilizationWindowSeconds: 300 # 需要缩容时，先观察[stabilizationWindowSeconds]秒，如果一直持续需要缩容才执行缩容
-      policies:
-        - type: Percent
-          value: 100 # 允许缩掉[value]%的pod
-          periodSeconds: 15

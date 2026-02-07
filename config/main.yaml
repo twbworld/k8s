@@ -5,84 +5,70 @@
 #   name: dev
 
 ---
-# 持久卷声明: pod向集群申请持久卷, sc会分配到合适的pv
-apiVersion: v1
-kind: PersistentVolumeClaim
-metadata:
-  name: log
-  namespace: default
-spec:
-  accessModes:
-    - ReadWriteOnce
-  storageClassName: local-path #k3s自带的
-  resources:
-    requests:
-      storage: 256Mi
-
----
 # 优先级
 apiVersion: scheduling.k8s.io/v1
 kind: PriorityClass
 metadata:
-  name: default-pc
-value: 1000
-globalDefault: true
-description: "默认优先级类"
+  name: critical-pc
+value: 1000000
+globalDefault: false
+description: "关键服务"
 
 ---
 apiVersion: scheduling.k8s.io/v1
 kind: PriorityClass
 metadata:
-  name: low-pc
-value: 500
-globalDefault: false
-description: "低优先级类"
+  name: normal-pc
+value: 1000
+globalDefault: true
+description: "普通服务"
 
 ---
 apiVersion: v1
 kind: LimitRange
 metadata:
-  name: default-limit-range
+  name: pod-resource-limits
   namespace: default
 spec:
   limits:
     - type: Container
-      # 为没有指定资源请求的容器设置默认请求值
+      # 默认请求值：新 Pod 不写 resources 时自动分配
       defaultRequest:
-        cpu: "100m"
-        memory: "16Mi"
-      # 为没有指定资源限制的容器设置默认限制值
+        memory: 32Mi
+        cpu: 20m
+      # 默认限制值
       default:
-        cpu: "500m"
-        memory: "128Mi"
-      # 设定一个容器可以请求的最大资源限制
-      max:
-        cpu: "1" # 单个容器最多使用的CPU核心数
-        memory: "512Mi" # 单个容器最多使用的内存
-      # 设定一个容器必须请求的最小资源
+        memory: 128Mi
+        cpu: 300m
+      # 强制最小值：Pod 的配置必须 >= 此值
       min:
-        cpu: "50m"
-        memory: "8Mi"
+        memory: 16Mi # 避免过小内存导致 Crash
+        cpu: 10m
+      # 强制最大值：Pod 的配置必须 <= 此值
+      max:
+        memory: 1024Mi # 单容器上限，防止单点故障
+        cpu: 2000m # 单个容器最多使用的CPU核心数
 
 ---
+# 命名空间总资源配额
 apiVersion: v1
 kind: ResourceQuota
 metadata:
-  name: default-rq
+  name: default-resource-quota
   namespace: default
 spec:
   hard:
-    # 所有容器的 CPU 请求总和不能超过的核数
-    requests.cpu: "1.5"
-    # 所有容器的内存请求总和不能超过的内存
-    requests.memory: 640Mi
-    # 所有容器的 CPU 限制总和不能超过核数
-    limits.cpu: "1.8"
-    # 所有容器的内存限制总和不能超过内存
-    limits.memory: 1920Mi
+    # 所有 Pod 保证得到的内存总和(最低留500m给系统和k3s)
+    requests.memory: 1408Mi
+    # 所有 Pod 保证得到的 CPU 总和 (约 100% 物理资源)
+    requests.cpu: 1800m
+    # 所有 Pod 最多能占用的内存总和(留500m给系统和k3s后,有Swap做垫底)
+    limits.memory: 2048Mi
+    # 所有 Pod 最多能抢占的 CPU 总和：(约 200%物理资源)
+    limits.cpu: 3800m
     # 对持久卷声明(PVC)的数量和总容量进行限制
-    persistentvolumeclaims: "10"
-    requests.storage: "16Gi"
+    persistentvolumeclaims: 8
+    requests.storage: 8Gi
 
 #Role============================================================begin
 
