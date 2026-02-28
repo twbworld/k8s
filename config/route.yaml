@@ -298,7 +298,7 @@ spec:
             kind: Middleware
             name: block-ip
 --- #xray流量r,使用自己的域名不安全,后期删除(并删除cf的dns)
-apiVersion: gateway.networking.k8s.io/v1alpha2
+apiVersion: gateway.networking.k8s.io/v1
 kind: TLSRoute
 metadata:
   name: xray-r
@@ -313,7 +313,7 @@ spec:
         - name: xray-svc
           port: 443
 --- #xray流量reality
-apiVersion: gateway.networking.k8s.io/v1alpha2
+apiVersion: gateway.networking.k8s.io/v1
 kind: TLSRoute
 metadata:
   name: xray-target
@@ -328,7 +328,7 @@ spec:
         - name: xray-svc
           port: 443
 --- #xray流量x
-apiVersion: gateway.networking.k8s.io/v1alpha2
+apiVersion: gateway.networking.k8s.io/v1
 kind: TLSRoute
 metadata:
   name: xray-x
@@ -343,7 +343,7 @@ spec:
         - name: xray-svc
           port: 80
 --- #xray流量xr
-apiVersion: gateway.networking.k8s.io/v1alpha2
+apiVersion: gateway.networking.k8s.io/v1
 kind: TLSRoute
 metadata:
   name: xray-xr
@@ -358,7 +358,7 @@ spec:
         - name: xray-svc
           port: 8443
 --- #xray流量xg
-apiVersion: gateway.networking.k8s.io/v1alpha2
+apiVersion: gateway.networking.k8s.io/v1
 kind: TLSRoute
 metadata:
   name: xray-xg
@@ -561,7 +561,7 @@ spec:
 #         - name: frp-svc
 #           port: 22
 --- #frp-http流量
-# apiVersion: gateway.networking.k8s.io/v1alpha2
+# apiVersion: gateway.networking.k8s.io/v1
 # kind: TLSRoute
 # metadata:
 #   name: frp-http

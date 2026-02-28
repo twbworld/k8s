@@ -1,5 +1,5 @@
-# 请自行安装CRDs组件(自行修改版本号): kubectl apply -f <网址>
+# 请自行安装CRDs组件(自行修改版本号!!!): kubectl apply -f <网址>
 
-#行业标准CRDs(稳定组件): https://github.com/kubernetes-sigs/gateway-api/releases/download/v1.4.1/standard-install.yaml
-#行业标准CRDs(实验组件,tlsroutes/tcproutes等): https://github.com/kubernetes-sigs/gateway-api/releases/download/v1.4.1/experimental-install.yaml
-#Traefik扩展: https://raw.githubusercontent.com/traefik/traefik/v3.5/docs/content/reference/dynamic-configuration/kubernetes-crd-definition-v1.yml
+#行业标准CRDs(稳定组件): https://github.com/kubernetes-sigs/gateway-api/releases/download/v1.5.0/standard-install.yaml
+#行业标准CRDs(实验组件,tlsroutes/tcproutes等): https://github.com/kubernetes-sigs/gateway-api/releases/download/v1.5.0/experimental-install.yaml
+#Traefik扩展: https://raw.githubusercontent.com/traefik/traefik/v3.6.7/docs/content/reference/dynamic-configuration/kubernetes-crd-definition-v1.yml

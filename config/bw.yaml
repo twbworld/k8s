@@ -33,7 +33,7 @@ spec:
       restartPolicy: Always
       containers:
         - name: bw-server
-          image: vaultwarden/server:1.35.2-alpine
+          image: vaultwarden/server:1.35.4-alpine
           imagePullPolicy: IfNotPresent
           securityContext:
             privileged: false
