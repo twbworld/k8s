@@ -297,21 +297,6 @@ spec:
             group: traefik.io
             kind: Middleware
             name: block-ip
---- #xray流量r,使用自己的域名不安全,后期删除(并删除cf的dns)
-apiVersion: gateway.networking.k8s.io/v1
-kind: TLSRoute
-metadata:
-  name: xray-r
-spec:
-  parentRefs:
-    - name: traefik-gtw
-      sectionName: sni-xray
-  hostnames:
-    - r.404502.xyz
-  rules:
-    - backendRefs:
-        - name: xray-svc
-          port: 443
 --- #xray流量reality
 apiVersion: gateway.networking.k8s.io/v1
 kind: TLSRoute

@@ -56,7 +56,7 @@ spec:
               exit 1
       containers:
         - name: xray-server
-          image: ghcr.io/xtls/xray-core:26.2.6
+          image: ghcr.io/xtls/xray-core:26.3.27
           imagePullPolicy: IfNotPresent
           resources:
             requests:
