@@ -45,6 +45,9 @@ spec:
     #   tag: "3.5.1"
     service:
       ipFamilyPolicy: "PreferDualStack"
+      ipFamilies:
+        - IPv4
+        - IPv6 # 允许ipv6, 需k3s安装时设置
       spec:
         externalTrafficPolicy: Local #流量只发给本机的Pod而不转发到其他节点,用于保留用户真实ip;https://www.cnblogs.com/zisefeizhu/p/13262239.html
     env:

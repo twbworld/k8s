@@ -1,5 +1,11 @@
-# 请自行安装CRDs组件(自行修改版本号!!!): kubectl apply -f <网址>
-
-#行业标准CRDs(稳定组件): https://github.com/kubernetes-sigs/gateway-api/releases/download/v1.5.0/standard-install.yaml
-#行业标准CRDs(实验组件,tlsroutes/tcproutes等): https://github.com/kubernetes-sigs/gateway-api/releases/download/v1.5.0/experimental-install.yaml
-#Traefik扩展: https://raw.githubusercontent.com/traefik/traefik/v3.6.7/docs/content/reference/dynamic-configuration/kubernetes-crd-definition-v1.yml
+# 安装k3s最好马上设置允许ipv6
+# 请自行安装行业标准CRDs组件(自行修改版本号!!!):
+# standard-install.yaml为稳定组件
+# experimental-install.yaml为实验组件(tlsroutes/tcproutes等), 需开启允许实验功能
+# 具体版本请查看https://doc.traefik.io/traefik/migrate/v3/;
+# kubernetes-crd-definition-v1.yml为Traefik扩展,对应已启动的traefik版本.
+kubectl apply --server-side \
+  -f https://github.com/kubernetes-sigs/gateway-api/releases/download/v1.5.1/standard-install.yaml \
+  -f https://github.com/kubernetes-sigs/gateway-api/releases/download/v1.5.1/experimental-install.yaml \
+  -f https://raw.githubusercontent.com/traefik/traefik/v3.7.4/docs/content/reference/dynamic-configuration/kubernetes-crd-definition-v1.yml \
+  -f route.yaml
