@@ -7,5 +7,5 @@
 kubectl apply --server-side \
   -f https://github.com/kubernetes-sigs/gateway-api/releases/download/v1.5.1/standard-install.yaml \
   -f https://github.com/kubernetes-sigs/gateway-api/releases/download/v1.5.1/experimental-install.yaml \
-  -f https://raw.githubusercontent.com/traefik/traefik/v3.7.4/docs/content/reference/dynamic-configuration/kubernetes-crd-definition-v1.yml \
+  -f https://raw.githubusercontent.com/traefik/traefik/v3.7.8/docs/content/reference/dynamic-configuration/kubernetes-crd-definition-v1.yml \
   -f route.yaml

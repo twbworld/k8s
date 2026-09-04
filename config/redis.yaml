@@ -1,0 +1,73 @@
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: redis-deploy
+  labels:
+    app: redis
+spec:
+  replicas: 1
+  revisionHistoryLimit: 2
+  strategy:
+    type: Recreate
+  selector:
+    matchLabels:
+      app: redis
+  template:
+    metadata:
+      labels:
+        app: redis
+    spec:
+      priorityClassName: normal-pc
+      terminationGracePeriodSeconds: 15
+      restartPolicy: Always
+      containers:
+        - name: redis-server
+          image: redis:7-alpine
+          imagePullPolicy: IfNotPresent
+          command:
+            - redis-server
+            - --requirepass
+            - "root"
+            - --save
+            - ""
+            - --appendonly
+            - "no"
+          resources:
+            requests:
+              memory: 16Mi
+              cpu: 10m
+            limits:
+              memory: 64Mi
+              cpu: 100m
+          ports:
+            - name: redis-port
+              containerPort: 6379
+          readinessProbe:
+            initialDelaySeconds: 3
+            periodSeconds: 5
+            timeoutSeconds: 1
+            exec:
+              command: ["redis-cli", "-a", "root", "ping"]
+          livenessProbe:
+            initialDelaySeconds: 10
+            periodSeconds: 10
+            timeoutSeconds: 3
+            exec:
+              command: ["redis-cli", "-a", "root", "ping"]
+
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: redis-svc
+  labels:
+    app: redis
+spec:
+  type: ClusterIP
+  selector:
+    app: redis
+  ports:
+    - name: redis-port
+      port: 6379
+      targetPort: 6379

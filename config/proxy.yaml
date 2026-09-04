@@ -30,9 +30,32 @@ spec:
         - name: cm
           configMap:
             name: proxy-cm
+      initContainers:
+        - name: wait-redis
+          image: redis:7-alpine
+          imagePullPolicy: IfNotPresent
+          resources:
+            limits:
+              memory: 32Mi
+              cpu: 100m
+          command: ["sh", "-c"]
+          args:
+            - |
+              set -e
+              for i in $(seq 1 15); do
+                # 尝试带密执行 ping，收到 PONG 则代表完全就绪
+                if redis-cli --no-auth-warning -h redis-svc -p 6379 -a "root" ping 2>/dev/null | grep -q "PONG"; then
+                  echo "redis已启动"
+                  exit 0
+                fi
+                echo "⏳ Waiting for redis-svc (attempt $i/15)..."
+                sleep 2
+              done
+              echo "redis未启动" >&2
+              exit 1
       containers:
         - name: proxy-server
-          image: ghcr.io/twbworld/proxy:1.5.6
+          image: ghcr.io/twbworld/proxy:1.7.1
           imagePullPolicy: IfNotPresent
           resources:
             requests:
