@@ -43,6 +43,18 @@ spec:
     # image:
     #   repository: "rancher/mirrored-library-traefik"
     #   tag: "3.5.1"
+    # additionalArguments: #https://doc.traefik.io/traefik/reference/static-configuration/cli/
+    providers:
+      kubernetesCRD:
+        enabled: true
+        allowCrossNamespace: true ##允许跨namespace使用资源
+        allowExternalNameServices: true
+      kubernetesIngress:
+        enabled: true
+        allowExternalNameServices: true
+      kubernetesGateway:
+        enabled: true #启用Gateway API
+        experimentalChannel: true #Gateway API试验性功能
     service:
       ipFamilyPolicy: "PreferDualStack"
       ipFamilies:
@@ -50,102 +62,64 @@ spec:
         - IPv6 # 允许ipv6, 需k3s安装时设置
       spec:
         externalTrafficPolicy: Local #流量只发给本机的Pod而不转发到其他节点,用于保留用户真实ip;https://www.cnblogs.com/zisefeizhu/p/13262239.html
-    env:
-      - name: TZ
-        value: Asia/Shanghai
     api:
       dashboard: false
       insecure: false #不安全模式,允许HTTP方式访问API
       disabledashboardad: true
+    gateway:
+      enabled: true
+      listeners:
+        web:
+          port: 80
+          protocol: HTTP
+    env:
+      - name: TZ
+        value: Asia/Shanghai
     ports:
-      websecure:
-        port: 443 #traefik会自动生成"--entryPoints.websecure.address"
-        tls:
-          enabled: true #true:如果配置了tls证书则优先,否则会使用traefik默认的证书;(这websecure指8443, 但入口依然是443);false:禁用tls
-      web:
-        port: 80
       ssh:
         port: 2222
         # exposedPort: 2222 #可略
         expose:
           default: false #将端口真正暴露到集群外;一旦设置,可分别在endpoint/service查到port/exposedPort
-    additionalArguments: #https://doc.traefik.io/traefik/reference/static-configuration/cli/
-      - --providers.kubernetescrd
-      - --providers.kubernetescrd.allowExternalNameServices
-      - --providers.kubernetescrd.allowCrossNamespace #允许跨namespace使用资源
-      - --providers.kubernetesingress
-      - --providers.kubernetesIngress.allowExternalNameServices
-      - --providers.kubernetesgateway #启用Gateway API
-      - --providers.kubernetesgateway.experimentalchannel #Gateway API试验性功能
-      - --entryPoints.websecure.forwardedHeaders.insecure #为获取真实ip
-      - --entryPoints.web.forwardedHeaders.insecure  #获取真实ip
-      - --entryPoints.web.http.redirections.entrypoint.to=websecure
-      - --entryPoints.web.http.redirections.entryPoint.scheme=https
-      - --entryPoints.web.http.redirections.entrypoint.permanent=true #?308:307 重定向
-    #从IP链排除的ip(proxy_add_x_forwarded_for和proxy_protocol_addr就会带上如cdn平台的ip,导致真实ip被隐藏);
-    #https://www.cloudflare.com/ips/
-    #https://raw.githubusercontent.com/twbworld/docker/main/conf/nginx/conf.d/common/ip.conf
-    proxyProtocol:
-      enabled: true
-      trustedIPs:
-        - 142.171.223.53
-        - 134.175.168.189
-        - 121.4.195.125
-        - 127.0.0.0/24
-        - 192.168.0.0/16
-        - 172.1.0.0/16
-        - 10.0.0.0/16
-        - 173.245.48.0/20
-        - 103.21.244.0/22
-        - 103.22.200.0/22
-        - 103.31.4.0/22
-        - 141.101.64.0/18
-        - 108.162.192.0/18
-        - 190.93.240.0/20
-        - 188.114.96.0/20
-        - 197.234.240.0/22
-        - 198.41.128.0/17
-        - 162.158.0.0/15
-        - 104.16.0.0/13
-        - 104.24.0.0/14
-        - 172.64.0.0/13
-        - 131.0.72.0/22
-        - 2400:cb00::/32
-        - 2606:4700::/32
-        - 2803:f800::/32
-        - 2405:b500::/32
-        - 2405:8100::/32
-        - 2a06:98c0::/29
-        - 2c0f:f248::/32
-    forwardedHeaders:
-      enabled: true
-      trustedIPs:
-        - 142.171.223.53
-        - 134.175.168.189
-        - 121.4.195.125
-        - 127.0.0.0/24
-        - 192.168.0.0/16
-        - 172.1.0.0/16
-        - 10.0.0.0/16
-        - 173.245.48.0/20
-        - 103.21.244.0/22
-        - 103.22.200.0/22
-        - 103.31.4.0/22
-        - 141.101.64.0/18
-        - 108.162.192.0/18
-        - 190.93.240.0/20
-        - 188.114.96.0/20
-        - 197.234.240.0/22
-        - 198.41.128.0/17
-        - 162.158.0.0/15
-        - 104.16.0.0/13
-        - 104.24.0.0/14
-        - 172.64.0.0/13
-        - 131.0.72.0/22
-        - 2400:cb00::/32
-        - 2606:4700::/32
-        - 2803:f800::/32
-        - 2405:b500::/32
-        - 2405:8100::/32
-        - 2a06:98c0::/29
-        - 2c0f:f248::/32
+      web:
+        port: 80
+        redirections:
+          entryPoint:
+            to: websecure #流量转发到websecure
+            scheme: https
+            permanent: true
+      websecure:
+        port: 443 #traefik会自动生成"--entryPoints.websecure.address"
+        tls:
+          enabled: true #true:如果配置了tls证书则优先,否则会使用traefik默认的证书;(这websecure指8443, 但入口依然是443);false:禁用tls
+        #从IP链排除的ip(proxy_add_x_forwarded_for和proxy_protocol_addr就会带上如cdn平台的ip,导致真实ip被隐藏);
+        #https://www.cloudflare.com/ips/
+        #https://raw.githubusercontent.com/twbworld/docker/main/conf/nginx/conf.d/common/ip.conf
+        forwardedHeaders:
+          trustedIPs:
+            - 127.0.0.1/32
+            - 192.168.0.0/16
+            - 10.0.0.0/8
+            - 172.16.0.0/12
+            - 173.245.48.0/20
+            - 103.21.244.0/22
+            - 103.22.200.0/22
+            - 103.31.4.0/22
+            - 141.101.64.0/18
+            - 108.162.192.0/18
+            - 190.93.240.0/20
+            - 188.114.96.0/20
+            - 197.234.240.0/22
+            - 198.41.128.0/17
+            - 162.158.0.0/15
+            - 104.16.0.0/13
+            - 104.24.0.0/14
+            - 172.64.0.0/13
+            - 131.0.72.0/22
+            - 2400:cb00::/32
+            - 2606:4700::/32
+            - 2803:f800::/32
+            - 2405:b500::/32
+            - 2405:8100::/32
+            - 2a06:98c0::/29
+            - 2c0f:f248::/32

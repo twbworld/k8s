@@ -1,0 +1,152 @@
+# ==========================================
+#  1. MetaCubeX 官方 Geo 数据库配置
+# ==========================================
+geodata-mode: true
+geo-auto-update: true
+geo-update-interval: 24
+geox-url:
+  geoip: "https://testingcf.jsdelivr.net/gh/MetaCubeX/meta-rules-dat@release/geoip.dat"
+  geosite: "https://testingcf.jsdelivr.net/gh/MetaCubeX/meta-rules-dat@release/geosite.dat"
+  mmdb: "https://testingcf.jsdelivr.net/gh/MetaCubeX/meta-rules-dat@release/country.mmdb"
+
+# ==========================================
+# 2. 域名嗅探配置 (解决部分应用直连IP导致分流失效的问题)
+# ==========================================
+sniffer:
+  enable: true
+  force-dns-mapping: true
+  parse-pure-ip: true
+  override-destination: false
+  sniff:
+    HTTP:
+      ports: [80, 8080-8880]
+      override-destination: true
+    TLS:
+      ports: [443, 8443]
+    QUIC:
+      ports: [443, 8443]
+  skip-domain:
+    - '+.io.mi.com'
+    - 'dlg.io.mi.com'
+    - '+.push.apple.com'
+
+# ==========================================
+# 3. DNS 配置 (防 DNS 泄漏与国内外精准分流)
+# ==========================================
+dns:
+  enable: true
+  listen: 0.0.0.0:1053
+  ipv6: false
+  enhanced-mode: fake-ip
+  fake-ip-range: 198.18.0.1/16
+  fake-ip-filter:
+    - '+.lan'
+    - '+.local'
+    - '+.msftconnecttest.com'
+    - '+.msftncsi.com'
+  default-nameserver:
+    - 223.5.5.5
+    - 119.29.29.29
+  nameserver:
+    - https://1.1.1.1/dns-query
+    - https://8.8.8.8/dns-query
+  nameserver-policy:
+    "geosite:cn,private":
+      - https://doh.pub/dns-query
+      - https://dns.alidns.com/dns-query
+
+# ==========================================
+# 4. 策略组配置 (增加特定应用的独立策略组，实现精细化分流)
+# ==========================================
+proxy-groups:
+  - name: 🚀 节点选择
+    type: select
+    proxies:
+      - ♻️ 自动选择
+      - DIRECT
+    include-all: true
+
+  - name: 🤖 AI 服务
+    type: select
+    proxies:
+      - 🚀 节点选择
+      - ♻️ 自动选择
+
+  - name: 🎥 国际媒体
+    type: select
+    proxies:
+      - 🚀 节点选择
+      - ♻️ 自动选择
+
+  - name: ✈️ Telegram
+    type: select
+    proxies:
+      - 🚀 节点选择
+      - ♻️ 自动选择
+
+  - name: 🍎 苹果服务
+    type: select
+    proxies:
+      - DIRECT
+      - 🚀 节点选择
+
+  - name: Ⓜ️ 微软服务
+    type: select
+    proxies:
+      - DIRECT
+      - 🚀 节点选择
+
+  - name: ♻️ 自动选择
+    type: url-test
+    include-all: true
+    url: http://www.gstatic.com/generate_204
+    interval: 300
+    tolerance: 50
+
+  - name: 🛑 广告拦截
+    type: select
+    proxies:
+      - REJECT
+      - DIRECT
+
+  - name: 🐟 漏网之鱼
+    type: select
+    proxies:
+      - 🚀 节点选择
+      - DIRECT
+
+# ==========================================
+# 5. 分流规则匹配列表
+# ==========================================
+rules:
+  # 1. 优先直连局域网与私有网络
+  - GEOSITE,private,DIRECT
+  - GEOIP,lan,DIRECT,no-resolve
+
+  # 2. 广告拦截 (基于官方数据库内置的广告合集)
+  - GEOSITE,category-ads-all,🛑 广告拦截
+
+  # 3. 核心应用与服务分流
+  - GEOSITE,openai,🤖 AI 服务
+  - GEOSITE,telegram,✈️ Telegram
+  - GEOIP,telegram,✈️ Telegram,no-resolve
+  - GEOSITE,category-entertainment,🎥 国际媒体
+  - GEOSITE,youtube,🎥 国际媒体
+  - GEOSITE,netflix,🎥 国际媒体
+  - GEOSITE,spotify,🎥 国际媒体
+  - GEOSITE,google,🎥 国际媒体
+
+  # 4. 微软与苹果服务
+  - GEOSITE,github,🚀 节点选择
+  - GEOSITE,microsoft,Ⓜ️ 微软服务
+  - GEOSITE,apple,🍎 苹果服务
+
+  # 5. 常见境外代理域名与 GFW 列表
+  - GEOSITE,geolocation-!cn,🚀 节点选择  # 仅保留这行即可涵盖 GFW 和所有非 CN 域名
+
+  # 6. 国内常见直连域名、IP 段直连
+  - GEOSITE,cn,DIRECT
+  - GEOIP,cn,DIRECT,no-resolve
+
+  # 兜底规则
+  - MATCH,🐟 漏网之鱼

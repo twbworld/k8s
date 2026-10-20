@@ -70,7 +70,6 @@ spec:
   selector:
     app: frp-container
   type: ClusterIP
-  sessionAffinity: ClientIP
   ports:
     - name: sp
       port: 443

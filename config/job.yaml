@@ -1,5 +1,150 @@
 #CronJob立即执行: kubectl create job --from=cronjob/xxx xxx
 ---
+# 自动更新优选ip到3X-UI下的"主机"
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: update-cf-ips-script
+  namespace: default
+data:
+  update-ips.sh: |
+    #!/bin/sh
+    set -e
+    # 确保依赖存在
+    apk add --no-cache curl jq > /dev/null
+
+    API_BASE="http://3x-ui-svc:2053/panel/api/hosts"
+    HEADERS="-H \"Accept: application/json\" -H \"Content-Type: application/json\" -H \"Authorization: Bearer $TOKEN\""
+
+    # 获取 3x-ui 所有主机配置
+    HOSTS_JSON=$(curl -sSL -H "Accept: application/json" -H "Authorization: Bearer $TOKEN" "$API_BASE/list")
+
+    # 校验面板接口是否请求成功
+    if ! echo "$HOSTS_JSON" | grep -q '"success":true' && ! echo "$HOSTS_JSON" | grep -q '"success": true'; then
+      echo "❌ 获取 3x-ui 主机列表失败，请检查 TOKEN、服务状态或网络！"
+      echo "返回内容: $HOSTS_JSON"
+      exit 1
+    fi
+
+    # 封装：根据 remark 更新对应的主机 IPs
+    update_host_ips() {
+      local REMARK=$1
+      local NEW_IPS_JSON=$2 # 期望格式: ["ip1", "ip2"]
+
+      if [ -z "$NEW_IPS_JSON" ] || [ "$NEW_IPS_JSON" = "[]" ]; then
+        echo "⚠️ $REMARK 提供的 IP 为空，跳过更新。"
+        return
+      fi
+
+      local HOST_OBJ=$(echo "$HOSTS_JSON" | jq -c ".obj[] | select(.remark == \"$REMARK\")" | head -n 1)
+      if [ -z "$HOST_OBJ" ]; then
+        echo "❌ 未找到备注为 [$REMARK] 的主机配置，跳过。"
+        return
+      fi
+
+      local GROUP_ID=$(echo "$HOST_OBJ" | jq -r '.groupId')
+      # 此处直接在原有完整配置上修改 hosts，继承其他全部字段配置
+      local BODY=$(echo "$HOST_OBJ" | jq -c --argjson hosts "$NEW_IPS_JSON" '.hosts = $hosts')
+
+      # 提交更新
+      local RES=$(curl -sSL -X POST -H "Content-Type: application/json" -H "Authorization: Bearer $TOKEN" -d "$BODY" "$API_BASE/update/$GROUP_ID")
+      local IS_SUCCESS=$(echo "$RES" | jq -r '.success')
+      if [ "$IS_SUCCESS" = "true" ]; then
+        echo "✅ [$REMARK] 更新成功! 新IP: $NEW_IPS_JSON"
+      else
+        echo "❌ [$REMARK] 更新失败! 返回: $RES"
+      fi
+    }
+
+    # ================= 获取优选 IP 逻辑 =================
+
+    echo "正在从公开节点获取三网优选IP..."
+    # 请求，并附带免费查询密钥
+    API_RES=$(curl -sSL -X POST -H "Content-Type: application/json" -d '{"key": "o1zrmHAF"}' --connect-timeout 15 "https://api.hostmonit.com/get_optimization_ip")
+
+    if echo "$API_RES" | grep -q '"info"'; then
+      # 针对以 CM/CU/CT 为键名的对象正确提取前2个IP
+      IPS_CM=$(echo "$API_RES" | jq -c '[.info.CM[]?.ip] | .[0:2]')
+      IPS_CU=$(echo "$API_RES" | jq -c '[.info.CU[]?.ip] | .[0:2]')
+      IPS_CT=$(echo "$API_RES" | jq -c '[.info.CT[]?.ip] | .[0:2]')
+
+      update_host_ips "移动@" "$IPS_CM"
+      update_host_ips "联通@" "$IPS_CU"
+      update_host_ips "电信@" "$IPS_CT"
+    else
+      echo "❌ 获取优选 IP 失败，API 响应异常或为空："
+      echo "$API_RES"
+      exit 1
+    fi
+
+---
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: cron-update-cf-ips
+  namespace: default
+spec:
+  schedule: "0 4 * * *"
+  concurrencyPolicy: Forbid
+  successfulJobsHistoryLimit: 2
+  failedJobsHistoryLimit: 2
+  jobTemplate:
+    spec:
+      template:
+        spec:
+          restartPolicy: OnFailure
+          initContainers:
+            - name: wait-3x-ui
+              image: curlimages/curl:latest
+              imagePullPolicy: IfNotPresent
+              resources:
+                requests:
+                  memory: 16Mi
+                  cpu: 10m
+                limits:
+                  memory: 32Mi
+                  cpu: 100m
+              command: ["sh", "-c"]
+              args:
+                - |
+                  set -e
+                  # 循环检测 12 次，每次间隔 5 秒 (总计 60 秒)
+                  for i in $(seq 1 12); do
+                    if curl -sf http://3x-ui-svc:2053 >/dev/null 2>&1; then
+                      echo "✅ 3x-ui-svc:2053 已就绪"
+                      exit 0
+                    fi
+                    echo "⏳ 正在等待 3x-ui-svc:2053 就绪 (尝试 $i/12)..."
+                    sleep 5
+                  done
+                  echo "❌ 3x-ui-svc 未启动，终止当前任务" >&2
+                  exit 1
+          containers:
+            - name: updater
+              image: alpine:3.24
+              imagePullPolicy: IfNotPresent
+              command:
+                - /bin/sh
+                - /scripts/update-ips.sh
+              env:
+                - name: TOKEN # 安全注入 API Token
+                  valueFrom:
+                    secretKeyRef:
+                      name: 3x-ui-api-token
+                      key: token
+                - name: TZ
+                  value: Asia/Shanghai
+              volumeMounts:
+                - name: script-volume
+                  mountPath: /scripts
+          volumes:
+            - name: script-volume
+              configMap:
+                name: update-cf-ips-script
+                defaultMode: 0755 # 赋予执行权限
+
+
+---
 #定时清理log
 # apiVersion: batch/v1
 # kind: CronJob

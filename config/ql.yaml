@@ -86,7 +86,6 @@ spec:
   selector:
     app: ql-container
   clusterIP: None
-  sessionAffinity: ClientIP
   ports:
     - name: sp
       port: 5700

@@ -1,0 +1,131 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: 3x-ui-deploy
+  labels:
+    app: 3x-ui
+spec:
+  replicas: 1
+  revisionHistoryLimit: 2
+  strategy:
+    type: Recreate #避免SQLite锁问题, 不使用RollingUpdate
+  selector:
+    matchLabels:
+      app: 3x-ui
+  template:
+    metadata:
+      labels:
+        app: 3x-ui
+    spec:
+      priorityClassName: critical-pc
+      terminationGracePeriodSeconds: 30
+      restartPolicy: Always
+      volumes:
+        - name: 3x-ui-data
+          hostPath:
+            type: DirectoryOrCreate
+            path: /var/www/k8s/data/tmp/3x-ui/
+        - name: tls
+          secret:
+            secretName: xray-secret
+      initContainers:
+        - name: wait-pan
+          image: curlimages/curl:latest
+          imagePullPolicy: IfNotPresent
+          resources:
+            requests:
+              memory: 16Mi
+              cpu: 10m
+            limits:
+              memory: 32Mi
+              cpu: 100m
+          command: ["sh", "-c"]
+          args:
+            - |
+              set -e
+              for i in $(seq 1 45); do
+                if curl -sf http://pan-svc:80 >/dev/null 2>&1; then
+                  echo "pan已启动"
+                  exit 0
+                fi
+                echo "⏳ Waiting for pan-svc (attempt $i/15)..."
+                sleep 5
+              done
+              echo "pan未启动" >&2
+              exit 1
+      containers:
+        - name: 3x-ui-server
+          image: ghcr.io/mhsanaei/3x-ui:3.10.2
+          imagePullPolicy: IfNotPresent
+          resources:
+            requests:
+              memory: 256Mi
+              cpu: 50m
+            limits:
+              memory: 512Mi
+              cpu: 1000m
+          ports:
+            - name: cp-xtls
+              containerPort: 443
+            - name: cp-tls
+              containerPort: 80
+            - name: cp-xhttp
+              containerPort: 8443
+            - name: cp-grpc
+              containerPort: 8080
+            - name: cp-fallback
+              containerPort: 8081
+            - name: cp-panel #3x-ui管理面板
+              containerPort: 2053
+            - name: cp-sub #3x-ui订阅端口
+              containerPort: 2096
+          env:
+            - name: TZ
+              value: Asia/Shanghai
+          volumeMounts:
+            - name: 3x-ui-data
+              mountPath: /etc/x-ui/ # 3x-ui.db 存储位置
+            - name: tls
+              mountPath: /etc/cert/
+              readOnly: true
+          readinessProbe:
+            initialDelaySeconds: 10
+            periodSeconds: 10
+            timeoutSeconds: 3
+            httpGet:
+              scheme: HTTP
+              port: cp-panel
+              path: /
+          livenessProbe:
+            initialDelaySeconds: 30
+            periodSeconds: 15
+            timeoutSeconds: 3
+            httpGet:
+              scheme: HTTP
+              port: cp-panel
+              path: /
+
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: 3x-ui-svc
+  labels:
+    app: 3x-ui
+spec:
+  selector:
+    app: 3x-ui
+  type: ClusterIP
+  ports:
+    - name: sp-xtls
+      port: 443
+    - name: sp-tls
+      port: 80
+    - name: sp-xhttp
+      port: 8443
+    - name: sp-grpc
+      port: 8080
+    - name: sp-panel
+      port: 2053
+    - name: sp-sub
+      port: 2096

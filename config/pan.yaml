@@ -137,9 +137,12 @@ spec:
           image: curlimages/curl:latest
           imagePullPolicy: IfNotPresent
           resources:
+            requests:
+              memory: 16Mi
+              cpu: 10m
             limits:
-              memory: 64Mi
-              cpu: 100m
+              memory: 32Mi
+              cpu: 200m
           volumeMounts:
             - name: init-data
               mountPath: /file
@@ -148,7 +151,7 @@ spec:
             - |
               set -e  # 任一命令失败立即退出
 
-              # 下载 CDN IP 配置 (保留原逻辑)
+              # 下载 CDN IP 配置
               IP_CONF="/file/ip.conf"
               for url in \
                 "https://raw.githubusercontent.com/twbworld/docker/main/conf/nginx/conf.d/common/ip.conf" \
@@ -178,11 +181,11 @@ spec:
           imagePullPolicy: IfNotPresent
           resources:
             requests:
-              memory: 64Mi
+              memory: 32Mi
               cpu: 20m
             limits:
-              memory: 512Mi
-              cpu: 600m
+              memory: 256Mi
+              cpu: 500m
           ports:
             - name: cp
               containerPort: 80
@@ -237,7 +240,6 @@ spec:
   selector:
     app: pan
   type: ClusterIP
-  sessionAffinity: ClientIP
   ports:
     - name: sp
       port: 80

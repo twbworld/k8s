@@ -180,7 +180,7 @@ spec:
     app: mysql #匹配spec.template.metadata.labels
   # type: ClusterIP #ClusterIP(默认)/NodePort/LoadBalancer(这个模式与k8s不同, k3s不依赖云服务,而在每个node上部署一个svclb的pod做流量转发)
   clusterIP: None #无头服务(Headless Service),让每个pod都有了特定地址(podName.svcName(可在pod内查看hosts))从而可直接访问(相对的,正常service会随机选pod实现负载均衡,没有特定访问地址);如:"mysql读写分离"需对单个pod进行"写"操作,因此就需要特定地址
-  sessionAffinity: ClientIP #会话保持
+  sessionAffinity: ClientIP #会话保持,单副本（replicas: 1）不需要配置sessionAffinity
   sessionAffinityConfig:
     clientIP:
       timeoutSeconds: 3600

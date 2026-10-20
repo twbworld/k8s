@@ -55,7 +55,7 @@ spec:
               exit 1
       containers:
         - name: proxy-server
-          image: ghcr.io/twbworld/proxy:1.7.1
+          image: ghcr.io/twbworld/proxy:1.8.0
           imagePullPolicy: IfNotPresent
           resources:
             requests:
@@ -110,7 +110,6 @@ metadata:
     app: proxy
 spec:
   type: ClusterIP
-  sessionAffinity: ClientIP
   selector:
     app: proxy
   ports:

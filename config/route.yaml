@@ -10,23 +10,11 @@ apiVersion: traefik.io/v1alpha1
 kind: Middleware
 metadata:
   name: block-ip
+  namespace: default
 spec:
   ipAllowList:
     sourceRange:
       - "127.0.0.1/32" #只允许本地，变相拒绝外部所有直接IP访问
-
---- #公用规则合并
-apiVersion: traefik.io/v1alpha1
-kind: Middleware
-metadata:
-  name: group1
-  namespace: default
-spec:
-  chain:
-    middlewares:
-      - name: worker-processes
-      - name: limit-req
-      - name: circuit-breaker
 --- #https规则合并
 apiVersion: traefik.io/v1alpha1
 kind: Middleware
@@ -36,7 +24,9 @@ metadata:
 spec:
   chain:
     middlewares:
-      - name: group1
+      - name: worker-processes
+      - name: limit-req
+      - name: circuit-breaker
       # - name: http2https
       - name: compress
       - name: add-header
@@ -47,6 +37,7 @@ apiVersion: traefik.io/v1alpha1
 kind: Middleware
 metadata:
   name: worker-processes
+  namespace: default
 spec:
   inFlightReq:
     amount: 100
@@ -58,6 +49,7 @@ apiVersion: traefik.io/v1alpha1
 kind: Middleware
 metadata:
   name: limit-req
+  namespace: default
 spec:
   rateLimit: # 1s内接收的平均请求数不大于average，高峰最大burst
     average: 20
@@ -67,12 +59,17 @@ apiVersion: traefik.io/v1alpha1
 kind: Middleware
 metadata:
   name: circuit-breaker
+  namespace: default
 spec:
   circuitBreaker:
-    expression: > #达?%(要有小数点)流量的网络延迟超?秒, 或网络错误率>?%, 或5xx比例>80% 触发
+    #达?%(要有小数点)流量的网络延迟超?秒, 或网络错误率>?%, 或5xx比例>80% 触发
+    expression: >
       LatencyAtQuantileMS(90.0) > 5000 ||
       NetworkErrorRatio() > 0.8 ||
       ResponseCodeRatio(500, 600, 0, 600) > 0.8
+    checkPeriod: 10s
+    fallbackDuration: 15s
+    recoveryDuration: 15s
 
 --- #强制转https(traefik初始配置已设, 这冗余)
 # apiVersion: traefik.io/v1alpha1
@@ -88,6 +85,7 @@ apiVersion: traefik.io/v1alpha1
 kind: Middleware
 metadata:
   name: compress
+  namespace: default
 spec:
   compress: {}
 --- #响应头
@@ -95,6 +93,7 @@ apiVersion: traefik.io/v1alpha1
 kind: Middleware
 metadata:
   name: add-header
+  namespace: default
 spec:
   headers:
     frameDeny: true #禁止外源iframes,减少点击劫持
@@ -113,6 +112,7 @@ apiVersion: traefik.io/v1alpha1
 kind: Middleware
 metadata:
   name: error-4xx
+  namespace: default
 spec:
   errors:
     status:
@@ -126,6 +126,7 @@ apiVersion: traefik.io/v1alpha1
 kind: Middleware
 metadata:
   name: error-5xx
+  namespace: default
 spec:
   errors:
     status:
@@ -134,14 +135,6 @@ spec:
     service:
       name: pan-svc
       port: 80
---- #TCP中间件
-apiVersion: traefik.io/v1alpha1
-kind: MiddlewareTCP
-metadata:
-  name: inflightconn
-spec:
-  inFlightConn: #并发 TCP 连接
-    amount: 200
 --- #密码授权验证
 apiVersion: traefik.io/v1alpha1
 kind: Middleware
@@ -150,8 +143,29 @@ metadata:
   namespace: default
 spec:
   basicAuth:
-    secret: traefik-dashboard-secret
+    secret: secret
     removeHeader: true #删除验证头
+--- #修改url
+apiVersion: traefik.io/v1alpha1
+kind: Middleware
+metadata:
+  name: add-sub-prefix
+  namespace: default
+spec:
+  addPrefix:
+    prefix: /sub
+--- #后台管理/API专用轻量中间件链（仅保留安全头和压缩，去除熔断、限流与错误页重定向）
+apiVersion: traefik.io/v1alpha1
+kind: Middleware
+metadata:
+  name: admin-http
+  namespace: default
+spec:
+  chain:
+    middlewares:
+      - name: add-header
+      - name: compress
+
 #================end
 
 ---
@@ -197,6 +211,7 @@ apiVersion: gateway.networking.k8s.io/v1
 kind: Gateway
 metadata:
   name: traefik-gtw
+  namespace: default
 spec:
   gatewayClassName: traefik-gc
   # addresses:
@@ -278,30 +293,32 @@ spec:
         certificateRefs:
           - name: xray-secret
 
---- #默认流量(未匹配到其他规则时使用)
+--- #web默认流量(未匹配到其他规则时使用)
 apiVersion: gateway.networking.k8s.io/v1
 kind: HTTPRoute
 metadata:
   name: catch-all-ip
+  namespace: default
 spec:
   parentRefs:
     - name: traefik-gtw
       sectionName: web
   rules:
-    - backendRefs:
-        - name: pan-svc
-          port: 80
-      filters:
+    - filters:
         - type: ExtensionRef
           extensionRef:
             group: traefik.io
             kind: Middleware
             name: block-ip
+      backendRefs:
+        - name: pan-svc
+          port: 80
 --- #xray流量reality
 apiVersion: gateway.networking.k8s.io/v1
 kind: TLSRoute
 metadata:
   name: xray-target
+  namespace: default
 spec:
   parentRefs:
     - name: traefik-gtw
@@ -310,13 +327,14 @@ spec:
     - mail.mypeter.net
   rules:
     - backendRefs:
-        - name: xray-svc
+        - name: 3x-ui-svc
           port: 443
 --- #xray流量x
 apiVersion: gateway.networking.k8s.io/v1
 kind: TLSRoute
 metadata:
   name: xray-x
+  namespace: default
 spec:
   parentRefs:
     - name: traefik-gtw
@@ -325,28 +343,30 @@ spec:
     - x.404502.xyz
   rules:
     - backendRefs:
-        - name: xray-svc
+        - name: 3x-ui-svc
           port: 80
---- #xray流量xr
-apiVersion: gateway.networking.k8s.io/v1
-kind: TLSRoute
-metadata:
-  name: xray-xr
-spec:
-  parentRefs:
-    - name: traefik-gtw
-      sectionName: sni-xray
-  hostnames:
-    - xr.404502.xyz
-  rules:
-    - backendRefs:
-        - name: xray-svc
-          port: 8443
+--- #xray流量xr(由于3x-ui不能xhttp上下行分流,弃用)
+# apiVersion: gateway.networking.k8s.io/v1
+# kind: TLSRoute
+# metadata:
+#   name: xray-xr
+#   namespace: default
+# spec:
+#   parentRefs:
+#     - name: traefik-gtw
+#       sectionName: sni-xray
+#   hostnames:
+#     - xr.404502.xyz
+#   rules:
+#     - backendRefs:
+#         - name: 3x-ui-svc
+#           port: 8443
 --- #xray流量xg
 apiVersion: gateway.networking.k8s.io/v1
 kind: TLSRoute
 metadata:
   name: xray-xg
+  namespace: default
 spec:
   parentRefs:
     - name: traefik-gtw
@@ -355,39 +375,22 @@ spec:
     - xg.404502.xyz
   rules:
     - backendRefs:
-        - name: xray-svc
+        - name: 3x-ui-svc
           port: 8080
 --- #xray-主域名
 apiVersion: gateway.networking.k8s.io/v1
 kind: HTTPRoute
 metadata:
-  name: xray-main
+  name: xray-default
+  namespace: default
 spec:
   parentRefs:
     - name: traefik-gtw
       sectionName: xray-main
-  hostnames:
-    - 404502.xyz
-  rules:
-    - filters:
-        - type: ExtensionRef
-          extensionRef:
-            group: traefik.io
-            kind: Middleware
-            name: http
-      backendRefs:
-        - name: pan-svc #分配到假页面
-          port: 80
---- #xray-www
-apiVersion: gateway.networking.k8s.io/v1
-kind: HTTPRoute
-metadata:
-  name: xray-main-www
-spec:
-  parentRefs:
     - name: traefik-gtw
       sectionName: xray-www
   hostnames:
+    - 404502.xyz
     - www.404502.xyz
   rules:
     - filters:
@@ -397,13 +400,14 @@ spec:
             kind: Middleware
             name: http
       backendRefs:
-        - name: pan-svc #分配到假页面
+        - name: pan-svc
           port: 80
 --- #traefik面板
 apiVersion: gateway.networking.k8s.io/v1
 kind: HTTPRoute
 metadata:
   name: dashboard
+  namespace: default
 spec:
   parentRefs:
     - name: traefik-gtw
@@ -441,6 +445,7 @@ apiVersion: gateway.networking.k8s.io/v1
 kind: HTTPRoute
 metadata:
   name: pan
+  namespace: default
 spec:
   parentRefs:
     - name: traefik-gtw
@@ -460,36 +465,84 @@ spec:
       backendRefs:
         - name: pan-svc
           port: 80
---- #订阅
+--- #xray订阅
 apiVersion: gateway.networking.k8s.io/v1
 kind: HTTPRoute
 metadata:
-  name: proxy
+  name: xray-sub
+  namespace: default
 spec:
   parentRefs:
     - name: traefik-gtw
       sectionName: websecure
   hostnames:
     - www.twbhub.top
-    - clash.twbhub.top
+    - clash.twbhub.top #兼容旧域名,后期删除!!!
+  rules:
+    - matches:
+        - path:
+            type: PathPrefix
+            value: /sub
+      filters:
+        - type: ExtensionRef
+          extensionRef:
+            group: traefik.io
+            kind: Middleware
+            name: admin-http
+      backendRefs:
+        - name: 3x-ui-svc
+          port: 2096
+    - matches:
+        - path:
+            type: PathPrefix
+            value: /
+      filters:
+        - type: ExtensionRef
+          extensionRef:
+            group: traefik.io
+            kind: Middleware
+            name: admin-http
+        - type: ExtensionRef
+          extensionRef:
+            group: traefik.io
+            kind: Middleware
+            name: add-sub-prefix
+      backendRefs:
+        - name: 3x-ui-svc
+          port: 2096
+--- #xray面板
+apiVersion: gateway.networking.k8s.io/v1
+kind: HTTPRoute
+metadata:
+  name: 3x-ui
+  namespace: default
+spec:
+  parentRefs:
+    - name: traefik-gtw
+      sectionName: websecure
+  hostnames:
+    - x.twbhub.top
   rules:
     - filters:
         - type: ExtensionRef
           extensionRef:
             group: traefik.io
             kind: Middleware
-            name: http
-      matches:
-        - method: GET #限制请求方法
-        - method: POST
+            name: admin-http
+        - type: ExtensionRef
+          extensionRef:
+            group: traefik.io
+            kind: Middleware
+            name: auth
       backendRefs:
-        - name: proxy-svc
-          port: 80
+        - name: 3x-ui-svc
+          port: 2053
 --- #小程序
 apiVersion: gateway.networking.k8s.io/v1
 kind: HTTPRoute
 metadata:
   name: dating
+  namespace: default
 spec:
   parentRefs:
     - name: traefik-gtw
@@ -504,7 +557,7 @@ spec:
             kind: Middleware
             name: http
       matches:
-        - method: GET
+        - method: GET #限制请求方法
         - method: POST
       backendRefs:
         - name: dating-svc
@@ -514,6 +567,7 @@ apiVersion: gateway.networking.k8s.io/v1
 kind: HTTPRoute
 metadata:
   name: bw
+  namespace: default
 spec:
   parentRefs:
     - name: traefik-gtw
@@ -560,24 +614,3 @@ spec:
 #     - backendRefs:
 #         - name: frp-svc
 #           port: 443
---- #青龙面板
-# apiVersion: gateway.networking.k8s.io/v1
-# kind: HTTPRoute
-# metadata:
-#   name: ql
-# spec:
-#   parentRefs:
-#     - name: traefik-gtw
-#       sectionName: websecure
-#   hostnames:
-#     - ql.twbhub.top
-#   rules:
-#     - filters:
-#         - type: ExtensionRef
-#           extensionRef:
-#             group: traefik.io
-#             kind: Middleware
-#             name: http
-#       backendRefs:
-#         - name: ql-svc
-#           port: 80
